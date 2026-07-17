@@ -1,0 +1,24 @@
+// 预加载脚本：只暴露桌宠需要的几个通道，不开 nodeIntegration
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('petAPI', {
+  // 宠物走一步（dx 像素），主进程移动窗口
+  step: (dx) => ipcRenderer.send('pet-step', dx),
+  // 主进程回报这一步是否撞墙掉头
+  onStepDone: (cb) => ipcRenderer.on('pet-step-done', (_e, flipped) => cb(flipped)),
+  // 拖拽开始：主进程记下窗口当前位置和尺寸
+  dragStart: () => ipcRenderer.send('pet-drag-start'),
+  // 拖拽中：鼠标在屏幕坐标系的绝对位移，主进程直接叠加
+  dragTo: (payload) => ipcRenderer.send('pet-drag', payload),
+  // 滚轮调节大小（dy 正负决定方向，ax/ay 为鼠标视口坐标，vw/vh 为视口宽高）
+  resize: (payload) => ipcRenderer.send('pet-resize', payload),
+  // 主进程通报当前缩放倍数（气泡反向补偿用）
+  onScale: (cb) => ipcRenderer.on('pet-scale', (_e, s) => cb(s)),
+  // 调试用：查询主进程权威状态
+  debugState: () => ipcRenderer.invoke('pet-debug-state'),
+  // 调试用：测试时开关鼠标穿透
+  debugIgnoreMouse: (flag) => ipcRenderer.invoke('pet-debug-ignore-mouse', flag),
+  // 右键菜单事件
+  onToggleSleep: (cb) => ipcRenderer.on('toggle-sleep', () => cb()),
+  onTalk: (cb) => ipcRenderer.on('talk', () => cb())
+});

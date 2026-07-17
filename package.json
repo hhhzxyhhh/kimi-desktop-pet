@@ -1,0 +1,32 @@
+{
+  "name": "kimi-desktop-pet",
+  "version": "0.2.0",
+  "description": "Kimi 桌宠——一只活的官方头像，住在你的桌面上",
+  "main": "main.js",
+  "author": "张馨月",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^31.7.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.kimi.pet",
+    "productName": "Kimi桌宠",
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html"
+    ],
+    "mac": {
+      "category": "public.app-category.entertainment"
+    },
+    "win": {
+      "target": "portable"
+    }
+  }
+}

@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Kimi 桌宠</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; width: 240px; height: 240px;
+    overflow: hidden; background: transparent;
+    font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    -webkit-user-select: none; user-select: none;
+  }
+  .shadow {
+    position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+    width: 110px; height: 14px; border-radius: 50%;
+    background: radial-gradient(ellipse, rgba(30,80,180,.25), transparent 70%);
+    pointer-events: none;
+  }
+  .orb {
+    position: absolute; left: 50%; bottom: 16px;
+    width: 150px; height: 150px; margin-left: -75px;
+    cursor: pointer;
+  }
+  .orb svg { width: 100%; height: 100%; display: block; overflow: visible; filter: drop-shadow(0 6px 14px rgba(41,132,252,.30)); }
+  .squash { width: 100%; height: 100%; transform-origin: 50% 100%; transition: transform .25s ease; }
+  .breathe { animation: breathe 3.4s ease-in-out infinite; }
+  @keyframes breathe { 0%, 100% { transform: scale(1,1); } 50% { transform: scale(1.015,1.035); } }
+
+  .eyes-wrap { transform-box: fill-box; transform-origin: center; transition: transform .09s ease; }
+  .orb.blink .eyes-wrap { transform: scaleY(.08); }
+
+  .orb .expr, .orb .sweat { display: none; }
+  .orb[data-expr="default"] .expr-default,
+  .orb[data-expr="happy"]   .expr-happy,
+  .orb[data-expr="shock"]   .expr-shock,
+  .orb[data-expr="angry"]   .expr-angry,
+  .orb[data-expr="sleepy"]  .expr-sleepy,
+  .orb[data-expr="love"]    .expr-love,
+  .orb[data-expr="dizzy"]   .expr-dizzy,
+  .orb[data-expr="sweat"]   .expr-default { display: block; }
+  .orb[data-expr="sweat"] .sweat { display: block; }
+
+  .hop { animation: hop .58s ease-in-out infinite; }
+  @keyframes hop {
+    0%   { transform: translateY(0)     scale(1.06,.9); }
+    30%  { transform: translateY(-20px) scale(.95,1.1); }
+    55%  { transform: translateY(-28px) scale(1,1); }
+    100% { transform: translateY(0)     scale(1.06,.9); }
+  }
+
+  .poked { animation: poke .5s ease; }
+  @keyframes poke { 0%{transform:scale(1,1);} 30%{transform:scale(1.22,.74);} 60%{transform:scale(.92,1.1);} 100%{transform:scale(1,1);} }
+  .wobble { animation: wobble .7s ease; }
+  @keyframes wobble { 0%{transform:scale(1.2,.8);} 25%{transform:scale(.9,1.12);} 50%{transform:scale(1.07,.94);} 75%{transform:scale(.98,1.03);} 100%{transform:scale(1,1);} }
+
+  .orb.sleeping .breathe { animation: none; }
+  .orb.sleeping .squash { transform: scale(1.14,.76); }
+
+  .zzz { position: absolute; top: -28px; right: -18px; width: 40px; height: 60px; display: none; pointer-events: none; }
+  .orb.sleeping .zzz { display: block; }
+  .zzz span { position: absolute; font-weight: 800; color: #7ba7e8; opacity: 0; animation: rise 2.2s linear infinite; }
+  .zzz span:nth-child(1) { font-size: 14px; right: 0; top: 26px; }
+  .zzz span:nth-child(2) { font-size: 18px; right: 12px; top: 14px; animation-delay: .7s; }
+  .zzz span:nth-child(3) { font-size: 22px; right: 24px; top: 0; animation-delay: 1.4s; }
+  @keyframes rise {
+    0% { opacity: 0; transform: translate(0, 8px) scale(.6); }
+    20% { opacity: 1; }
+    100% { opacity: 0; transform: translate(12px, -30px) scale(1.15); }
+  }
+
+  .bubble {
+    position: absolute; bottom: 172px; left: 50%; transform: translateX(-50%) scale(0);
+    transform-origin: 50% 100%;
+    transition: transform .18s cubic-bezier(.34,1.56,.64,1); pointer-events: none;
+  }
+  .bubble.show { transform: translateX(-50%) scale(1); }
+  /* 气泡主体反向补偿窗口 zoom，任何尺寸下保持固定视觉大小 */
+  .bubble-body {
+    position: relative; background: #22304a; color: #fff; padding: 7px 13px;
+    border-radius: 13px; font-size: 13px; white-space: nowrap; transform-origin: 50% 100%;
+  }
+  .bubble-body::after {
+    content: ""; position: absolute; bottom: -6px; left: 50%; margin-left: -6px;
+    border: 6px solid transparent; border-top-color: #22304a; border-bottom: 0;
+  }
+
+  .orb.talking .squash { animation: talkBob .5s ease-in-out infinite; }
+  @keyframes talkBob { 0%, 100% { transform: translateY(0) scale(1,1); } 50% { transform: translateY(-6px) scale(.98,1.03); } }
+</style>
+</head>
+<body>
+  <div class="shadow"></div>
+  <div class="orb" id="orb" data-expr="default">
+    <div class="squash breathe" id="squash"></div>
+    <div class="zzz" id="zzz"><span>z</span><span>Z</span><span>z</span></div>
+  </div>
+  <div class="bubble" id="bubble"><div class="bubble-body" id="bubbleBody"></div></div>
+<script>
+/* ---------- 浏览器兜底：直接双击 index.html 也能预览（只是不会满屏走） ---------- */
+if (!window.petAPI) {
+  window.petAPI = {
+    step: () => {}, onStepDone: () => {}, dragStart: () => {}, dragTo: () => {}, resize: () => {},
+    onScale: () => {}, onToggleSleep: () => {}, onTalk: () => {}
+  };
+}
+
+/* ---------- Kimi 本体（矢量，中心深外围浅，无嘴） ---------- */
+function orbSvg() {
+  return `
+<svg viewBox="0 0 200 200" aria-hidden="true">
+  <defs>
+    <radialGradient id="g1" gradientUnits="userSpaceOnUse" cx="100" cy="110" r="92">
+      <stop offset="0" stop-color="#1983FC"/>
+      <stop offset=".35" stop-color="#2F8DFD"/>
+      <stop offset=".7" stop-color="#55A3FF"/>
+      <stop offset="1" stop-color="#78B6FF"/>
+    </radialGradient>
+  </defs>
+  <ellipse cx="100" cy="112" rx="86" ry="79" fill="url(#g1)"/>
+  <g class="eyes-wrap">
+    <g class="expr expr-default">
+      <rect x="66" y="70" width="22" height="34" rx="11" fill="#ffffff"/>
+      <rect x="112" y="70" width="22" height="34" rx="11" fill="#ffffff"/>
+    </g>
+    <g class="expr expr-happy">
+      <path d="M64 92 Q77 76 90 92" stroke="#ffffff" stroke-width="9" fill="none" stroke-linecap="round"/>
+      <path d="M110 92 Q123 76 136 92" stroke="#ffffff" stroke-width="9" fill="none" stroke-linecap="round"/>
+    </g>
+    <g class="expr expr-shock">
+      <circle cx="77" cy="88" r="14" fill="#ffffff"/>
+      <circle cx="123" cy="88" r="14" fill="#ffffff"/>
+    </g>
+    <g class="expr expr-angry">
+      <path d="M64 76 L88 86 L64 98" stroke="#ffffff" stroke-width="9" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M136 76 L112 86 L136 98" stroke="#ffffff" stroke-width="9" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <g class="expr expr-sleepy">
+      <path d="M64 90 Q77 100 90 90" stroke="#ffffff" stroke-width="8" fill="none" stroke-linecap="round"/>
+      <path d="M110 90 Q123 100 136 90" stroke="#ffffff" stroke-width="8" fill="none" stroke-linecap="round"/>
+    </g>
+    <g class="expr expr-love">
+      <path d="M77 103 C58 88 62 68 77 76 C92 68 96 88 77 103 Z" fill="#ffffff"/>
+      <path d="M123 103 C104 88 108 68 123 76 C138 68 142 88 123 103 Z" fill="#ffffff"/>
+    </g>
+    <g class="expr expr-dizzy">
+      <path d="M66 76 L88 98 M88 76 L66 98" stroke="#ffffff" stroke-width="8" stroke-linecap="round"/>
+      <path d="M112 76 L134 98 M134 76 L112 98" stroke="#ffffff" stroke-width="8" stroke-linecap="round"/>
+    </g>
+  </g>
+  <path class="sweat" d="M152 52 C162 68 164 76 152 84 C140 76 142 68 152 52 Z" fill="#9fdcff"/>
+</svg>`;
+}
+
+const orb = document.getElementById('orb');
+const squash = document.getElementById('squash');
+const bubble = document.getElementById('bubble');
+const bubbleBody = document.getElementById('bubbleBody');
+squash.innerHTML = orbSvg();
+
+function setExpr(e) { orb.dataset.expr = e; }
+
+/* ---------- 气泡（主体反向补偿窗口 zoom；装不下时收敛，绝不截断） ---------- */
+let bubbleTimer = null;
+let curScale = 1;
+function fitBubble() {
+  const w = bubbleBody.offsetWidth, h = bubbleBody.offsetHeight;
+  if (!w || !h) return;
+  // 窗口 CSS 宽恒为 240，气泡底边锚在头顶上方（距顶 68px）：
+  // 补偿系数 capped，保证气泡完整落在窗口内、不被截断
+  const cMax = Math.min(236 / w, 68 / h);
+  bubbleBody.style.transform = `scale(${Math.min(1 / curScale, cMax)})`;
+}
+petAPI.onScale(s => { curScale = s; fitBubble(); });
+
+function say(text, ms) {
+  bubbleBody.textContent = text;
+  fitBubble();
+  bubble.classList.add('show');
+  clearTimeout(bubbleTimer);
+  bubbleTimer = setTimeout(() => bubble.classList.remove('show'), ms || 1600);
+}
+
+/* ---------- 状态机：idle / walk / sleep / drag ---------- */
+let state = 'idle';
+let dir = Math.random() < .5 ? 1 : -1;
+let stateTimer = null, stepTimer = null, walkStopTimer = null, sleepTimer = null;
+
+function clearTimers() {
+  clearTimeout(stateTimer); clearInterval(stepTimer);
+  clearTimeout(walkStopTimer); clearTimeout(sleepTimer);
+  stateTimer = stepTimer = walkStopTimer = sleepTimer = null;
+}
+
+function toIdle() {
+  clearTimers();
+  state = 'idle';
+  orb.classList.remove('sleeping');
+  squash.classList.remove('hop');
+  squash.classList.add('breathe');
+  stateTimer = setTimeout(decide, 4000 + Math.random() * 5000);
+}
+
+function decide() {
+  if (state !== 'idle') return;
+  const r = Math.random();
+  if (r < .55) startWalk();
+  else if (r < .75) startSleep();
+  else stateTimer = setTimeout(decide, 3000 + Math.random() * 4000);
+}
+
+function startWalk() {
+  clearTimers();
+  state = 'walk';
+  squash.classList.remove('breathe');
+  squash.classList.add('hop');
+  stepTimer = setInterval(() => petAPI.step(9 * dir), 580);
+  walkStopTimer = setTimeout(() => toIdle(), 5000 + Math.random() * 7000);
+}
+
+petAPI.onStepDone(flipped => { if (flipped) dir *= -1; });
+
+function startSleep() {
+  clearTimers();
+  state = 'sleep';
+  squash.classList.remove('hop');
+  squash.classList.add('breathe');
+  orb.classList.add('sleeping');
+  setExpr('sleepy');
+  sleepTimer = setTimeout(() => wake(false), 12000 + Math.random() * 8000);
+}
+
+function wake(angry) {
+  if (state !== 'sleep') return;
+  orb.classList.remove('sleeping');
+  toIdle();
+  if (angry) {
+    setExpr('angry');
+    say('……干嘛啦', 1200);
+    setTimeout(() => setExpr('default'), 1500);
+  } else {
+    setExpr('default');
+    squash.classList.add('wobble');
+    setTimeout(() => squash.classList.remove('wobble'), 720);
+  }
+}
+
+/* ---------- 戳 & 拖拽 ---------- */
+const pokeTexts = ['啵！', '呜', '别戳啦', '？', '再戳要漏气了', '嗷呜'];
+let poking = false;
+function poke() {
+  if (poking) return;
+  if (state === 'sleep') { wake(true); return; }
+  if (state !== 'idle') return;
+  poking = true;
+  squash.classList.remove('poked');
+  void squash.offsetWidth;
+  squash.classList.add('poked');
+  say(pokeTexts[Math.floor(Math.random() * pokeTexts.length)], 750);
+  if (Math.random() < .35) {
+    setExpr('shock');
+    setTimeout(() => setExpr('default'), 650);
+  }
+  setTimeout(() => { squash.classList.remove('poked'); poking = false; }, 520);
+}
+
+let pressing = false, dragging = false;
+let pressX = 0, pressY = 0;
+let lastX = 0, lastY = 0, lastT = 0;
+
+orb.addEventListener('pointerdown', e => {
+  pressing = true; dragging = false;
+  // 注意：必须用 screenX（屏幕绝对坐标）。clientX 是相对窗口的，
+  // 窗口跟着鼠标一动，clientX 就被自己的移动抵消，形成反馈（实测拖到一半速）
+  pressX = e.screenX; pressY = e.screenY;
+  lastX = e.clientX; lastY = e.clientY; lastT = performance.now();
+  petAPI.dragStart();
+});
+
+window.addEventListener('pointermove', e => {
+  if (!pressing) return;
+  if (!dragging && Math.hypot(e.screenX - pressX, e.screenY - pressY) > 5) {
+    dragging = true;
+    clearTimers();
+    state = 'drag';
+    orb.classList.remove('sleeping');
+    squash.classList.remove('hop');
+    squash.style.transition = 'transform .08s';
+    setExpr('shock');
+  }
+  if (dragging) {
+    petAPI.dragTo({ dx: e.screenX - pressX, dy: e.screenY - pressY });
+    const now = performance.now();
+    const dt = Math.max(now - lastT, 1);
+    const sp = Math.hypot(e.clientX - lastX, e.clientY - lastY) / dt * 16;
+    const s = Math.min(sp / 30, .3);
+    squash.style.transform = `scale(${1 + s}, ${1 - s * .7})`;
+    lastX = e.clientX; lastY = e.clientY; lastT = now;
+  }
+});
+
+window.addEventListener('pointerup', () => {
+  if (!pressing) return;
+  pressing = false;
+  if (dragging) {
+    dragging = false;
+    squash.style.transition = '';
+    squash.style.transform = '';
+    squash.classList.add('wobble');
+    setTimeout(() => squash.classList.remove('wobble'), 720);
+    setExpr('default');
+    toIdle();
+  } else {
+    poke();
+  }
+});
+
+/* ---------- 说话 ---------- */
+const talkTexts = [
+  '你好呀，我是 Kimi',
+  '今天也要加油哦',
+  '写代码别忘了喝水',
+  '我就是你的官方头像，没想到吧',
+  '别卷了，起来走两步',
+  '早点睡，失眠星人'
+];
+let talking = false;
+function talk() {
+  if (talking || state === 'sleep' || state === 'drag') return;
+  talking = true;
+  orb.classList.add('talking');
+  say(talkTexts[Math.floor(Math.random() * talkTexts.length)], 2200);
+  setTimeout(() => { orb.classList.remove('talking'); talking = false; }, 2200);
+}
+petAPI.onTalk(talk);
+orb.addEventListener('dblclick', talk);
+
+/* ---------- 滚轮调节大小 ---------- */
+orb.addEventListener('wheel', e => {
+  e.preventDefault();
+  petAPI.resize({ dy: e.deltaY, ax: e.clientX, ay: e.clientY, vw: window.innerWidth, vh: window.innerHeight });
+}, { passive: false });
+
+/* ---------- 右键菜单：睡觉 / 叫醒 ---------- */
+petAPI.onToggleSleep(() => {
+  if (state === 'sleep') wake(false);
+  else startSleep();
+});
+
+/* ---------- 眨眼 ---------- */
+(function blinkLoop() {
+  setTimeout(() => {
+    const e = orb.dataset.expr;
+    if (['default', 'sweat', 'love'].includes(e) && state !== 'drag' && !orb.classList.contains('talking')) {
+      orb.classList.add('blink');
+      setTimeout(() => orb.classList.remove('blink'), 170);
+    }
+    blinkLoop();
+  }, 2600 + Math.random() * 3200);
+})();
+
+/* ---------- 启动 ---------- */
+toIdle();
+</script>
+</body>
+</html>
