@@ -145,16 +145,21 @@ function createWindow() {
   win.on('move', saveSettings);
 
   // 宠物走一步：窗口平移 dx，撞到屏幕边缘则回报 flipped 让渲染进程掉头
+  // dx 可能不足 1px（小体型拆细步），小数部分累积进下一步，避免取整偏差
+  let stepFrac = 0;
   ipcMain.on('pet-step', (event, dx) => {
     if (!win) return;
     const [x, y] = win.getPosition();
     const size = win.getSize()[0];
     const area = screen.getPrimaryDisplay().workArea;
-    let nx = x + dx;
+    stepFrac += dx;
+    const move = Math.trunc(stepFrac);
+    stepFrac -= move;
+    let nx = x + move;
     let flipped = false;
     if (nx <= area.x) { nx = area.x; flipped = true; }
     if (nx >= area.x + area.width - size) { nx = area.x + area.width - size; flipped = true; }
-    win.setPosition(Math.round(nx), y);
+    win.setPosition(nx, y);
     event.reply('pet-step-done', flipped);
   });
 

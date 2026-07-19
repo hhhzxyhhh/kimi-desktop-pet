@@ -216,7 +216,9 @@ function startWalk() {
   state = 'walk';
   squash.classList.remove('breathe');
   squash.classList.add('hop');
-  stepTimer = setInterval(() => petAPI.step(9 * dir), 580);
+  // 步长按体型缩放（240px 身材每跳 9px）；一个蹦跳周期拆 6 小步，
+  // 小体型下 OS 窗口的离散大跳才是"一卡一卡"的来源，拆细后是平滑挪动
+  stepTimer = setInterval(() => petAPI.step(9 * dir * curScale / 6), 97);
   walkStopTimer = setTimeout(() => toIdle(), 5000 + Math.random() * 7000);
 }
 
