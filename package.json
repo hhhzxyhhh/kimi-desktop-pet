@@ -1,7 +1,7 @@
 {
   "name": "kimi-desktop-pet",
   "version": "0.2.0",
-  "description": "Kimi 桌宠——一只活的官方头像，住在你的桌面上",
+  "description": "非官方 Kimi 小蓝球桌宠——住在你的桌面上",
   "main": "main.js",
   "author": "张馨月",
   "license": "MIT",
