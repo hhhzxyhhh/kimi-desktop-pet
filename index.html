@@ -57,8 +57,9 @@
   .orb.sleeping .breathe { animation: none; }
   .orb.sleeping .squash { transform: scale(1.14,.76); }
 
-  .zzz { position: absolute; top: -28px; right: -18px; width: 40px; height: 60px; display: none; pointer-events: none; }
-  .orb.sleeping .zzz { display: block; }
+  .zzz { position: absolute; top: -8px; right: -2px; width: 40px; height: 60px; display: none; pointer-events: none; }
+  /* 睡觉时球压扁，头顶下移 ~30px，zzz 跟着下去贴着 */
+  .orb.sleeping .zzz { display: block; top: 18px; right: 4px; }
   .zzz span { position: absolute; font-weight: 800; color: #7ba7e8; opacity: 0; animation: rise 2.2s linear infinite; }
   .zzz span:nth-child(1) { font-size: 14px; right: 0; top: 26px; }
   .zzz span:nth-child(2) { font-size: 18px; right: 12px; top: 14px; animation-delay: .7s; }
@@ -66,7 +67,7 @@
   @keyframes rise {
     0% { opacity: 0; transform: translate(0, 8px) scale(.6); }
     20% { opacity: 1; }
-    100% { opacity: 0; transform: translate(12px, -30px) scale(1.15); }
+    100% { opacity: 0; transform: translate(8px, -14px) scale(1.15); }
   }
 
   .bubble {
