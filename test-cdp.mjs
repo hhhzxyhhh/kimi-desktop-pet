@@ -60,10 +60,18 @@ await cmd('Runtime.enable');
 await cmd('Page.enable');
 
 try {
-  // --- 屏蔽真实鼠标 + 冻结状态机（防走路干扰测量），归一到 scale 1 作为基准 ---
+  // --- 屏蔽真实鼠标 + 冻结状态机（防走路干扰测量） ---
   await evl(`petAPI.debugIgnoreMouse(true)`);
   await evl(`clearTimers(); state = 'drag';`);
   await sleep(300);
+
+  // --- T0a: 启动即同步缩放（持久化恢复到非 1 时，渲染层 curScale 必须跟上，否则气泡补偿错） ---
+  const boot = await geom();
+  const bootCur = await evl(`curScale`);
+  console.log(`T0a 启动恢复 scale=${boot.scale} 渲染层 curScale=${bootCur}`);
+  check('T0a 启动 curScale 同步', bootCur, boot.scale, 0.001);
+
+  // --- 归一到 scale 1 作为基准 ---
   const g0 = await toScale(1);
   console.log('T0 基准状态:', JSON.stringify(g0));
   check('T0 窗口宽', g0.w, 240, 2);
@@ -109,8 +117,11 @@ try {
   }`);
   await sleep(300);
   const d1 = await geom();
-  check('T3 拖拽 x 位移', d1.x - d0.x, -60, 2);
-  check('T3 拖拽 y 位移', d1.y - d0.y, -30, 2);
+  // macOS 会钳制窗口不许移出 workArea（比如菜单栏上方），期望值要算上钳制
+  const expX = Math.max(d0.area.x, d0.x - 60) - d0.x;
+  const expY = Math.max(d0.area.y, d0.y - 30) - d0.y;
+  check('T3 拖拽 x 位移', d1.x - d0.x, expX, 2);
+  check('T3 拖拽 y 位移', d1.y - d0.y, expY, 2);
   await evl(`window.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}))`);
 
   // --- T4: 大尺寸气泡：完整 + 贴在头顶上方 ---

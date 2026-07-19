@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('petAPI', {
   resize: (payload) => ipcRenderer.send('pet-resize', payload),
   // 主进程通报当前缩放倍数（气泡反向补偿用）
   onScale: (cb) => ipcRenderer.on('pet-scale', (_e, s) => cb(s)),
+  // 主进程通报光标屏幕坐标（眼睛追踪用）
+  onCursor: (cb) => ipcRenderer.on('cursor-pos', (_e, p) => cb(p)),
   // 调试用：查询主进程权威状态
   debugState: () => ipcRenderer.invoke('pet-debug-state'),
   // 调试用：测试时开关鼠标穿透

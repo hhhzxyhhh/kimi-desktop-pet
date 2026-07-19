@@ -20,13 +20,16 @@
     "files": [
       "main.js",
       "preload.js",
-      "index.html"
+      "index.html",
+      "assets"
     ],
     "mac": {
-      "category": "public.app-category.entertainment"
+      "category": "public.app-category.entertainment",
+      "icon": "assets/icon.png"
     },
     "win": {
-      "target": "portable"
+      "target": "portable",
+      "icon": "assets/icon.png"
     }
   }
 }

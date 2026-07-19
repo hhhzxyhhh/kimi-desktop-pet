@@ -28,6 +28,7 @@
 
   .eyes-wrap { transform-box: fill-box; transform-origin: center; transition: transform .09s ease; }
   .orb.blink .eyes-wrap { transform: scaleY(.08); }
+  .eye-track { transition: transform .15s ease-out; }
 
   .orb .expr, .orb .sweat { display: none; }
   .orb[data-expr="default"] .expr-default,
@@ -100,7 +101,7 @@
 if (!window.petAPI) {
   window.petAPI = {
     step: () => {}, onStepDone: () => {}, dragStart: () => {}, dragTo: () => {}, resize: () => {},
-    onScale: () => {}, onToggleSleep: () => {}, onTalk: () => {}
+    onScale: () => {}, onCursor: () => {}, onToggleSleep: () => {}, onTalk: () => {}
   };
 }
 
@@ -117,6 +118,7 @@ function orbSvg() {
     </radialGradient>
   </defs>
   <ellipse cx="100" cy="112" rx="86" ry="79" fill="url(#g1)"/>
+  <g class="eye-track">
   <g class="eyes-wrap">
     <g class="expr expr-default">
       <rect x="66" y="70" width="22" height="34" rx="11" fill="#ffffff"/>
@@ -146,6 +148,7 @@ function orbSvg() {
       <path d="M66 76 L88 98 M88 76 L66 98" stroke="#ffffff" stroke-width="8" stroke-linecap="round"/>
       <path d="M112 76 L134 98 M134 76 L112 98" stroke="#ffffff" stroke-width="8" stroke-linecap="round"/>
     </g>
+  </g>
   </g>
   <path class="sweat" d="M152 52 C162 68 164 76 152 84 C140 76 142 68 152 52 Z" fill="#9fdcff"/>
 </svg>`;
@@ -339,6 +342,19 @@ orb.addEventListener('wheel', e => {
   e.preventDefault();
   petAPI.resize({ dy: e.deltaY, ax: e.clientX, ay: e.clientY, vw: window.innerWidth, vh: window.innerHeight });
 }, { passive: false });
+
+/* ---------- 眼睛看向鼠标 ---------- */
+// 主进程轮询屏幕光标坐标发过来：看向屏幕上任意处的鼠标，不只窗口内
+// 偏移量最多 5 CSS px（随 zoom 等比放大，眼球越大动得越多，自然）
+function eyeTrack() { return squash.querySelector('.eye-track'); }
+petAPI.onCursor(({ x, y, wx, wy }) => {
+  if (pressing || state === 'sleep') return;
+  const dx = x - wx, dy = y - wy;
+  const d = Math.hypot(dx, dy) || 1;
+  const reach = 240 * curScale; // 一个窗口宽度的屏幕距离作为"满偏"参考
+  const t = Math.min(d / (reach / 2), 1) * 5;
+  eyeTrack().style.transform = `translate(${dx / d * t}px, ${dy / d * t}px)`;
+});
 
 /* ---------- 右键菜单：睡觉 / 叫醒 ---------- */
 petAPI.onToggleSleep(() => {
