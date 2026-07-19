@@ -60,7 +60,7 @@
   .acc-keyboard circle:nth-child(7) { animation-delay: .6s; }
   @keyframes keyTap { 0%, 100% { opacity: .18; } 50% { opacity: 1; } }
 
-  .hop { animation: hop .58s ease-in-out infinite; }
+  .hop { animation: hop .42s ease-in-out infinite; }
   @keyframes hop {
     0%   { transform: translateY(0)     scale(1.06,.9); }
     30%  { transform: translateY(-20px) scale(.95,1.1); }
@@ -306,14 +306,14 @@ function startWalk() {
   const a = winArea || { x: 0, y: 38, width: 1512, height: 876 };
   walkTX = a.x + Math.random() * (a.width - size);
   walkTY = a.y + Math.random() * (a.height - size);
-  const spd = 9 * Math.max(curScale, 0.6);
+  const spd = 13 * Math.max(curScale, 0.6); // 提速版：240px 身材每蹦跳周期 13px
   stepTimer = setInterval(() => {
     const dx = walkTX + size / 2 - winCX, dy = walkTY + size / 2 - winCY;
     const d = Math.hypot(dx, dy);
     if (d < spd * 1.5) { toIdle(); return; } // 到目的地了
     vx = dx / d * spd; vy = dy / d * spd;
     petAPI.step({ dx: vx / 6, dy: vy / 6 });
-  }, 97);
+  }, 70); // 一个蹦跳周期(.42s)拆 6 小步
   walkStopTimer = setTimeout(() => toIdle(), 6000 + Math.random() * 6000);
 }
 

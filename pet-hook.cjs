@@ -20,12 +20,14 @@ process.stdin.on('end', () => {
   try { p = JSON.parse(input); } catch {}
   const ev = p.hook_event_name || '';
   const tool = p.tool_name || '';
+  // 工具名归一化：CLI 可能给 PascalCase 也可能 snake_case（参考 Clawd 的 normalizeToolName）
+  const normTool = tool.toLowerCase().replace(/[_-]/g, '');
 
   let state = null;
   if (ev === 'UserPromptSubmit') state = 'thinking';          // 收到任务，思考中
   else if (ev === 'PreToolUse') {                              // 调工具：提问/搜索/其他区分
-    if (tool === 'AskUserQuestion') state = 'ask';
-    else state = /^(WebSearch|FetchURL)$/.test(tool) ? 'searching' : 'working';
+    if (normTool === 'askuserquestion') state = 'ask';
+    else state = /^(websearch|fetchurl)$/.test(normTool) ? 'searching' : 'working';
   }
   else if (ev === 'PermissionRequest') state = 'permission';   // 等待用户批准
   else if (ev === 'PostToolUse') state = 'working';            // 工具完成（含问题已回答），回岗位
