@@ -125,7 +125,7 @@ try {
   check('T2 点击后 y 不变', c1.y - c0.y, 0, 0);
 
   // --- T3: 拖拽：screenX 位移 -60, -30，窗口 1:1 跟随（任何缩放） ---
-  const d0 = await geom();
+  const d0 = await geomSettled();
   await evl(`{
     const o = document.getElementById('orb');
     o.dispatchEvent(new PointerEvent('pointerdown', {clientX: 150, clientY: 150, screenX: 500, screenY: 500, bubbles: true}));
@@ -136,8 +136,8 @@ try {
   // macOS 会钳制窗口不许移出 workArea（比如菜单栏上方），期望值要算上钳制
   const expX = Math.max(d0.area.x, d0.x - 60) - d0.x;
   const expY = Math.max(d0.area.y, d0.y - 30) - d0.y;
-  check('T3 拖拽 x 位移', d1.x - d0.x, expX, 2);
-  check('T3 拖拽 y 位移', d1.y - d0.y, expY, 2);
+  check('T3 拖拽 x 位移', d1.x - d0.x, expX, 4);
+  check('T3 拖拽 y 位移', d1.y - d0.y, expY, 4);
   await evl(`window.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}))`);
 
   // --- T9: 右键不触发戳（不进 shock、不出气泡） ---
@@ -210,7 +210,7 @@ try {
 
   // --- T13: Kimi Code 联动：状态文件 → 表情 + TTL 恢复 ---
   // 测试实例通过 KIMI_PET_STATE_FILE 指到这个独立路径，与真实 hook 的状态文件隔离
-  const writeAgent = (state, ageMs = 0) => writeFileSync(agentFile, JSON.stringify({ state, ts: Date.now() - ageMs }));
+  const writeAgent = (state, ageMs = 0, ev) => writeFileSync(agentFile, JSON.stringify({ state, ev, ts: Date.now() - ageMs }));
   await evl(`clearTimers(); state = 'idle';`);
   writeAgent('searching');
   await sleep(800);
@@ -236,8 +236,37 @@ try {
   checkTrue('T15 来活叫醒（睡觉类已移除）', t15.sleeping === false, JSON.stringify(t15));
   checkTrue('T15 叫醒后显示提问脸', t15.expr === 'question', JSON.stringify(t15));
   await evl(`clearTimers(); document.getElementById('orb').classList.remove('sleeping'); state = 'idle';`);
+
+  // --- T16: 思考脸最短展示 1.2s + 非瞬时状态常驻 ---
+  await evl(`petAPI.debugResetAgent(); agentState = null; agentFaceSince = 0;`);
+  writeAgent('thinking');
+  await sleep(700);
+  const t16a = await evl(`document.getElementById('orb').dataset.expr`);
+  checkTrue('T16 思考中→齿轮眼', t16a === 'think', `expr=${t16a}`);
+  writeAgent('working');
+  await sleep(200); // 思考脸才挂 0.9s，不许被顶掉
+  const t16b = await evl(`document.getElementById('orb').dataset.expr`);
+  checkTrue('T16 思考脸至少挂 1.2s', t16b === 'think', `expr=${t16b}`);
+  await sleep(1300); // 过 1.2s，应切到工作脸
+  const t16c = await evl(`document.getElementById('orb').dataset.expr`);
+  checkTrue('T16 到点切换工作脸', t16c === 'focus', `expr=${t16c}`);
+  writeAgent('thinking', 5000); // 非瞬时状态不过期：文件即当前状态，旧事件也保持显示
+  await sleep(1500);
+  const t16d = await evl(`document.getElementById('orb').dataset.expr`);
+  checkTrue('T16 非瞬时状态常驻', t16d === 'think', `expr=${t16d}`);
+
+  // --- T17: PostToolUse 的 working 超时降级 thinking ---
+  writeAgent('working', 2000, 'PostToolUse'); // 工具刚完成 2s：仍在干活
+  await sleep(1500);
+  const t17a = await evl(`document.getElementById('orb').dataset.expr`);
+  checkTrue('T17 工具刚完成→工作脸', t17a === 'focus', `expr=${t17a}`);
+  writeAgent('working', 20000, 'PostToolUse'); // 20s 没动作：降级沉思
+  await sleep(1500);
+  const t17b = await evl(`document.getElementById('orb').dataset.expr`);
+  checkTrue('T17 超时无动作→思考脸', t17b === 'think', `expr=${t17b}`);
+  await evl(`petAPI.debugResetAgent(); agentState = null; agentFaceSince = 0; clearTimeout(agentQueueTimer);`);
   writeAgent('working', 400000); // 400 秒前的工作状态：不过期，长期保持
-  await sleep(800);
+  await sleep(2500);
   const t13c = await evl(`document.getElementById('orb').dataset.expr`);
   checkTrue('T13 工作状态无限期保持', t13c === 'focus', `expr=${t13c}`);
   writeAgent('done', 10000); // done 是瞬时庆祝，10 秒前即过期

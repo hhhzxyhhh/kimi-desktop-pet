@@ -204,16 +204,23 @@ function createWindow() {
     // 状态一直保持到下一个信号；只有 done/error 是瞬时庆祝，闪一下就恢复
     const FLASH_TTL = { done: 3500, error: 5000 };
     let state = 'idle';
+    let outTs = s ? s.ts : 0;
     if (s && Number.isFinite(s.ts)) {
       const flash = FLASH_TTL[s.state];
       if (!flash || Date.now() - s.ts < flash) state = s.state;
+      else outTs = Date.now(); // 过期推导的 idle：视为当下事件，别被渲染层防乱序拦掉
+      // 工具完成后的 working：连续 15s 没有任何动作 = 真在沉思，降级为 thinking
+      if (state === 'working' && s.ev === 'PostToolUse' && Date.now() - s.ts > 15000) {
+        state = 'thinking';
+        outTs = Date.now(); // 降级同样是当下推导
+      }
     }
     // 同状态重复写入也是"新事件"（再次提问/连续调工具），要重新通报，否则叫醒不可靠
     const isNewEvent = !!(s && Number.isFinite(s.ts) && s.ts !== lastTs);
     if (isNewEvent) lastTs = s.ts;
     if (state !== lastAgent || isNewEvent) {
       lastAgent = state;
-      win.webContents.send('agent-state', { state });
+      win.webContents.send('agent-state', { state, ts: outTs });
     }
   }, 500);
 
@@ -282,6 +289,8 @@ function createWindow() {
   ipcMain.handle('pet-debug-ignore-mouse', (_e, flag) => {
     if (win) win.setIgnoreMouseEvents(!!flag);
   });
+  // 调试用：重置 agent 状态跟踪（长测试套件里让用例互不污染）
+  ipcMain.handle('pet-debug-reset-agent', () => { lastAgent = 'idle'; lastTs = 0; });
 }
 
 app.whenReady().then(() => {

@@ -30,16 +30,17 @@ process.stdin.on('end', () => {
     else state = /^(websearch|fetchurl)$/.test(normTool) ? 'searching' : 'working';
   }
   else if (ev === 'PermissionRequest') state = 'permission';   // 等待用户批准
-  else if (ev === 'PostToolUse') state = 'working';            // 工具完成（含问题已回答），回岗位
-  else if (ev === 'PermissionResult') state = 'thinking';      // 批准完继续想
+  else if (ev === 'PostToolUse') state = 'working';            // 工具完成，继续干活（写东西/分析）
+  else if (ev === 'PermissionResult') state = 'working';       // 批准完继续干
   else if (ev === 'Stop') state = 'done';                      // 回合完成（只认 Stop，后台任务通知不算）
   else if (ev === 'StopFailure') state = 'error';              // 回合失败
   else if (ev === 'Interrupt' || ev === 'SessionEnd' || ev === 'SessionStart') state = 'idle';
   // SessionStart 也复位（参考 Clawd On Desk）：新会话不继承上一个死会话的残留状态
 
-  if (!state) return; // 不关心的事件（PostToolUse 等）直接忽略
+  if (!state) return; // 不关心的事件（PostToolUseFailure 等）直接忽略
   try {
     fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true });
-    fs.writeFileSync(STATE_FILE, JSON.stringify({ state, tool, ts: Date.now() }));
+    // ev 带给主进程：PostToolUse 的 working 超时无动作才降级为 thinking
+    fs.writeFileSync(STATE_FILE, JSON.stringify({ state, tool, ev, ts: Date.now() }));
   } catch {}
 });

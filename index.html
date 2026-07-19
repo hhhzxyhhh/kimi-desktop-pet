@@ -250,17 +250,29 @@ petAPI.onMode(m => {
 });
 
 /* ---------- Kimi Code 联动：agent 状态覆盖表情（drag/sleep 时不打扰） ---------- */
-let agentState = null;
+let agentState = null, agentFaceSince = 0, agentQueueTimer = null;
 const agentExprMap = { thinking: 'think', working: 'focus', searching: 'search', permission: 'notice', ask: 'question', done: 'happy', error: 'dizzy' };
 petAPI.onAgentState(({ state: s }) => {
+  const next = s === 'idle' ? null : s;
+  const now = Date.now();
+  // 思考脸至少挂 1.2s：思考→调工具常常不足一秒，不兜底就一闪而过
+  if (agentState === 'thinking' && next !== 'thinking' && now - agentFaceSince < 1200) {
+    clearTimeout(agentQueueTimer);
+    agentQueueTimer = setTimeout(() => applyAgentState(next), 1200 - (now - agentFaceSince));
+    return;
+  }
+  applyAgentState(next);
+});
+function applyAgentState(next) {
   const was = agentState;
-  agentState = s === 'idle' ? null : s;
+  agentState = next;
+  if (next && next !== was) agentFaceSince = Date.now();
   if (agentState === 'done' && was !== 'done') say('搞定！', 1500);
   if (agentState && state === 'sleep') wake(false);      // 来活了叫醒
   else if (agentState && orb.classList.contains('sleeping')) orb.classList.remove('sleeping'); // 状态/类名兜底同步
   else if (agentState && state === 'walk') toIdle();     // 开工期间原地上班，不乱跑
   refreshFace();
-});
+}
 function refreshFace() {
   // 拖拽/睡觉（含类名残留）优先，agent 表情绝不允许盖上去
   if (state === 'drag' || state === 'sleep' || orb.classList.contains('sleeping')) return;

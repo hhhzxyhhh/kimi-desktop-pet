@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld('petAPI', {
   debugState: () => ipcRenderer.invoke('pet-debug-state'),
   // 调试用：测试时开关鼠标穿透
   debugIgnoreMouse: (flag) => ipcRenderer.invoke('pet-debug-ignore-mouse', flag),
+  // 调试用：重置 agent 状态跟踪
+  debugResetAgent: () => ipcRenderer.invoke('pet-debug-reset-agent'),
   // 右键菜单事件
   onToggleSleep: (cb) => ipcRenderer.on('toggle-sleep', () => cb()),
   onTalk: (cb) => ipcRenderer.on('talk', () => cb())
