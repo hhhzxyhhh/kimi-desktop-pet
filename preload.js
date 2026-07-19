@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('petAPI', {
   onCursor: (cb) => ipcRenderer.on('cursor-pos', (_e, p) => cb(p)),
   // 主进程通报行为模式（stay / kolo）
   onMode: (cb) => ipcRenderer.on('set-mode', (_e, m) => cb(m)),
+  // 主进程通报 Kimi Code agent 状态（thinking/working/searching/permission/done/error/idle）
+  onAgentState: (cb) => ipcRenderer.on('agent-state', (_e, p) => cb(p)),
   // 调试用：查询主进程权威状态
   debugState: () => ipcRenderer.invoke('pet-debug-state'),
   // 调试用：测试时开关鼠标穿透

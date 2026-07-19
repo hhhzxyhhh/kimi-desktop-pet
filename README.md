@@ -17,6 +17,7 @@
 - **眼睛看向鼠标**：你在它旁边晃，它会看你
 - **记住状态**：大小、位置和模式重启后自动恢复
 - **两种模式**：`stay` 乖乖待着（原地生活，不散步）/ `kolo` 到处乱跑（kimi only live once）
+- **联动 Kimi Code**：你给它派活时它会同步"上班"（见下）
 - **托盘图标**：macOS 菜单栏 / Windows 系统托盘，和右键同一套菜单
 - **右键菜单**：睡觉 / 叫醒 / 说句话 / 大小（120–480px 五档）/ 退出
 - 睡觉时戳它会被骂
@@ -45,11 +46,28 @@ npm start
 | 菜单栏/托盘图标 | 同一套菜单（找不到右键入口时用） |
 | 睡觉时戳 | 被凶 |
 
+## 联动 Kimi Code（可选，默认开启）
+
+通过 Kimi Code CLI 的 hooks 机制同步 agent 状态（事件 → `~/.kimi-code/hooks/pet-hook.cjs` → 状态文件 → 桌宠轮询）：
+
+| Kimi Code 状态 | 桌宠表情 |
+| --- | --- |
+| 你发出任务 | 思考脸（半眯眼看斜上方） |
+| 调用搜索类工具 | 放大镜眼 |
+| 调用其他工具 | 专注眼 |
+| 请求权限 | 默认眼 + 头顶感叹号 |
+| 回合完成 | 开心脸 + 气泡"搞定！"（3.5s 后恢复） |
+| 回合失败 | 晕眩脸 |
+| 打断 / 会话结束 | 恢复默认 |
+
+开工期间它会原地"上班"不散步；状态 15 秒无更新自动恢复（CLI 退出兜底）。
+想关闭联动：删掉 `~/.kimi-code/config.toml` 里 `pet-hook.cjs` 相关的 `[[hooks]]` 条目即可。
+
 ## 自动化测试（开发用）
 
 ```bash
-node_modules/.bin/electron . --remote-debugging-port=9223   # 先带调试端口启动
-node test-cdp.mjs                                            # 再跑测试（缩放/拖拽/气泡共 24 项断言）
+KIMI_PET_STATE_FILE=/tmp/pet-test-agent-state.json node_modules/.bin/electron . --remote-debugging-port=9223   # 先带调试端口启动（隔离联动状态）
+node test-cdp.mjs                                            # 再跑测试（41 项断言）
 ```
 
 ## 打包成应用（可选）

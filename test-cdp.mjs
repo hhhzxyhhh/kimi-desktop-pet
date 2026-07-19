@@ -2,9 +2,12 @@
 // 断言一律用主进程权威状态（petAPI.debugState），不信渲染层 outerWidth/screenX
 // 测试期间开启鼠标穿透，屏蔽用户真实鼠标的干扰；结束（含异常）恢复
 // 用法: node test-cdp.mjs   （需要 electron 以 --remote-debugging-port=9223 运行）
-import { writeFileSync } from 'fs';
+import { writeFileSync, rmSync } from 'fs';
 
 const PORT = 9223;
+// 测试专用联动状态文件（实例用 KIMI_PET_STATE_FILE 指向它）；开局先清掉，防上次残留污染
+const agentFile = '/tmp/pet-test-agent-state.json';
+rmSync(agentFile, { force: true });
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 let failures = 0;
 function check(name, actual, expected, tol = 3) {
@@ -193,6 +196,38 @@ try {
   await sleep(100);
   const t12c = await evl(`document.getElementById('orb').dataset.expr`);
   checkTrue('T12 被戳醒生气', t12c === 'angry', `expr=${t12c}`);
+
+  // --- T13: Kimi Code 联动：状态文件 → 表情 + TTL 恢复 ---
+  // 测试实例通过 KIMI_PET_STATE_FILE 指到这个独立路径，与真实 hook 的状态文件隔离
+  const writeAgent = (state, ageMs = 0) => writeFileSync(agentFile, JSON.stringify({ state, ts: Date.now() - ageMs }));
+  await evl(`clearTimers(); state = 'idle';`);
+  writeAgent('searching');
+  await sleep(800);
+  const t13a = await evl(`document.getElementById('orb').dataset.expr`);
+  checkTrue('T13 搜索中→放大镜眼', t13a === 'search', `expr=${t13a}`);
+  writeAgent('permission');
+  await sleep(800);
+  const t13b = await evl(`document.getElementById('orb').dataset.expr`);
+  checkTrue('T13 请求权限→感叹号', t13b === 'notice', `expr=${t13b}`);
+  writeAgent('working', 70000); // 70 秒前的旧状态，应被 TTL(60s) 判死
+  await sleep(800);
+  const t13c = await evl(`document.getElementById('orb').dataset.expr`);
+  checkTrue('T13 过期状态→恢复默认', t13c === 'default', `expr=${t13c}`);
+  writeAgent('working');
+  await sleep(800);
+  let leftPost = 0;
+  for (let i = 0; i < 10; i++) {
+    if (await evl(`clearTimers(); state = 'idle'; decide(); state`) !== 'idle') leftPost++;
+  }
+  checkTrue('T13 开工期间 decide 坚守岗位', leftPost === 0, `离岗次数=${leftPost}`);
+  writeAgent('done');
+  await sleep(800);
+  const t13d = await evl(`document.getElementById('orb').dataset.expr`);
+  checkTrue('T13 完成→开心', t13d === 'happy', `expr=${t13d}`);
+  await sleep(4000); // done TTL 3.5s
+  const t13e = await evl(`document.getElementById('orb').dataset.expr`);
+  checkTrue('T13 完成后自动恢复', t13e === 'default', `expr=${t13e}`);
+  rmSync(agentFile, { force: true });
 
   // --- T4: 大尺寸气泡：完整 + 贴在头顶上方 ---
   await evl(`clearTimers(); state = 'idle';`);

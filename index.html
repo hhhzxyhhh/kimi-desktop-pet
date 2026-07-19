@@ -30,7 +30,7 @@
   .orb.blink .eyes-wrap { transform: scaleY(.08); }
   .eye-track { transition: transform .15s ease-out; }
 
-  .orb .expr, .orb .sweat { display: none; }
+  .orb .expr, .orb .sweat, .orb .bang, .orb .acc { display: none; }
   .orb[data-expr="default"] .expr-default,
   .orb[data-expr="happy"]   .expr-happy,
   .orb[data-expr="shock"]   .expr-shock,
@@ -38,8 +38,25 @@
   .orb[data-expr="sleepy"]  .expr-sleepy,
   .orb[data-expr="love"]    .expr-love,
   .orb[data-expr="dizzy"]   .expr-dizzy,
+  .orb[data-expr="think"]   .expr-think,
+  .orb[data-expr="focus"]   .expr-focus,
+  .orb[data-expr="search"]  .expr-default,
+  .orb[data-expr="search"]  .acc-search,
+  .orb[data-expr="think"]   .acc-gear,
+  .orb[data-expr="focus"]   .acc-keyboard,
   .orb[data-expr="sweat"]   .expr-default { display: block; }
   .orb[data-expr="sweat"] .sweat { display: block; }
+  .orb[data-expr="notice"] .expr-ask,
+  .orb[data-expr="notice"] .bang { display: block; }
+  .acc-gear { transform-box: fill-box; transform-origin: center; animation: gearSpin 1.4s linear infinite; }
+  @keyframes gearSpin { to { transform: rotate(360deg); } }
+  .acc-keyboard circle { opacity: .18; animation: keyTap .72s ease-in-out infinite; }
+  .acc-keyboard circle:nth-child(3) { animation-delay: .12s; }
+  .acc-keyboard circle:nth-child(4) { animation-delay: .24s; }
+  .acc-keyboard circle:nth-child(5) { animation-delay: .36s; }
+  .acc-keyboard circle:nth-child(6) { animation-delay: .48s; }
+  .acc-keyboard circle:nth-child(7) { animation-delay: .6s; }
+  @keyframes keyTap { 0%, 100% { opacity: .18; } 50% { opacity: 1; } }
 
   .hop { animation: hop .58s ease-in-out infinite; }
   @keyframes hop {
@@ -102,7 +119,8 @@
 if (!window.petAPI) {
   window.petAPI = {
     step: () => {}, onStepDone: () => {}, dragStart: () => {}, dragTo: () => {}, resize: () => {},
-    onScale: () => {}, onCursor: () => {}, onMode: () => {}, onToggleSleep: () => {}, onTalk: () => {}
+    onScale: () => {}, onCursor: () => {}, onMode: () => {}, onAgentState: () => {},
+    onToggleSleep: () => {}, onTalk: () => {}
   };
 }
 
@@ -149,8 +167,40 @@ function orbSvg() {
       <path d="M66 76 L88 98 M88 76 L66 98" stroke="#ffffff" stroke-width="8" stroke-linecap="round"/>
       <path d="M112 76 L134 98 M134 76 L112 98" stroke="#ffffff" stroke-width="8" stroke-linecap="round"/>
     </g>
+    <g class="expr expr-think">
+      <rect x="67" y="76" width="20" height="26" rx="10" fill="#ffffff"/>
+      <rect x="113" y="76" width="20" height="26" rx="10" fill="#ffffff"/>
+    </g>
+    <g class="expr expr-ask">
+      <rect x="67" y="76" width="20" height="26" rx="10" fill="#ffffff"/>
+      <rect x="113" y="72" width="20" height="30" rx="10" fill="#ffffff"/>
+      <path d="M60 71 Q73 62 87 69" stroke="#ffffff" stroke-width="6.5" fill="none" stroke-linecap="round"/>
+    </g>
+    <g class="expr expr-focus">
+      <rect x="66" y="80" width="22" height="13" rx="6.5" fill="#ffffff" transform="rotate(14 77 86)"/>
+      <rect x="112" y="80" width="22" height="13" rx="6.5" fill="#ffffff" transform="rotate(-14 123 86)"/>
+    </g>
   </g>
   </g>
+  <g class="acc acc-search">
+    <circle cx="150" cy="54" r="18" fill="none" stroke="#cfe4ff" stroke-width="7"/>
+    <path d="M162 66 L174 78" stroke="#cfe4ff" stroke-width="7" stroke-linecap="round"/>
+  </g>
+  <g class="acc acc-gear" stroke="#cfe4ff" fill="none">
+    <circle cx="152" cy="58" r="24" stroke-width="14" stroke-dasharray="10.6 8.2"/>
+    <circle cx="152" cy="58" r="7" fill="#cfe4ff" stroke="none"/>
+  </g>
+  <g class="acc acc-keyboard">
+    <rect x="25" y="144" width="150" height="34" rx="8" fill="#cfe4ff"/>
+    <circle cx="48" cy="156" r="3" fill="#1983FC"/>
+    <circle cx="66" cy="156" r="3" fill="#1983FC"/>
+    <circle cx="84" cy="156" r="3" fill="#1983FC"/>
+    <circle cx="102" cy="156" r="3" fill="#1983FC"/>
+    <circle cx="120" cy="156" r="3" fill="#1983FC"/>
+    <circle cx="138" cy="156" r="3" fill="#1983FC"/>
+    <rect x="60" y="166" width="80" height="6" rx="3" fill="#1983FC" opacity=".35"/>
+  </g>
+  <path class="bang" d="M149 48 h8 v24 h-8 Z M153 80 m-5 0 a5 5 0 1 0 10 0 a5 5 0 1 0 -10 0" fill="#ffd166"/>
   <path class="sweat" d="M152 52 C162 68 164 76 152 84 C140 76 142 68 152 52 Z" fill="#9fdcff"/>
 </svg>`;
 }
@@ -192,6 +242,23 @@ petAPI.onMode(m => {
   mode = m;
   if (m === 'stay' && state === 'walk') toIdle(); // 正在走路也原地停下
 });
+
+/* ---------- Kimi Code 联动：agent 状态覆盖表情（drag/sleep 时不打扰） ---------- */
+let agentState = null;
+const agentExprMap = { thinking: 'think', working: 'focus', searching: 'search', permission: 'notice', done: 'happy', error: 'dizzy' };
+petAPI.onAgentState(({ state: s }) => {
+  const was = agentState;
+  agentState = s === 'idle' ? null : s;
+  if (agentState === 'done' && was !== 'done') say('搞定！', 1500);
+  if (agentState && state === 'sleep') wake(false);      // 来活了叫醒
+  else if (agentState && state === 'walk') toIdle();     // 开工期间原地上班，不乱跑
+  refreshFace();
+});
+function refreshFace() {
+  if (state === 'drag' || state === 'sleep') return; // 拖拽/睡颜优先，不打扰
+  if (agentState) setExpr(agentExprMap[agentState] || 'default');
+  else setExpr('default');
+}
 let dir = Math.random() < .5 ? 1 : -1;
 let stateTimer = null, stepTimer = null, walkStopTimer = null, sleepTimer = null;
 
@@ -212,6 +279,7 @@ function toIdle() {
 
 function decide() {
   if (state !== 'idle') return;
+  if (agentState) { stateTimer = setTimeout(decide, 3000); return; } // 开工期间坚守岗位，不散步不摸鱼
   const r = Math.random();
   if (mode === 'kolo' && r < .55) startWalk();          // stay 模式不散步
   else if (r < (mode === 'kolo' ? .75 : .2)) startSleep();
@@ -248,13 +316,13 @@ function wake(angry) {
   if (angry) {
     setExpr('angry');
     say('……干嘛啦', 1200);
-    setTimeout(() => { if (orb.dataset.expr === 'angry') setExpr('default'); }, 1500);
+    setTimeout(() => { if (orb.dataset.expr === 'angry') refreshFace(); }, 1500);
   } else {
     // 自然睡醒：开心一下再恢复
     setExpr('happy');
     squash.classList.add('wobble');
     setTimeout(() => squash.classList.remove('wobble'), 720);
-    setTimeout(() => { if (orb.dataset.expr === 'happy') setExpr('default'); }, 1600);
+    setTimeout(() => { if (orb.dataset.expr === 'happy') refreshFace(); }, 1600);
   }
 }
 
@@ -273,7 +341,7 @@ function poke() {
   if (Math.random() < .35) {
     setExpr('shock');
     // 竞态防护：复位时若表情已被别的状态（如睡觉）改掉，不再覆盖回 default
-    setTimeout(() => { if (orb.dataset.expr === 'shock') setExpr('default'); }, 650);
+    setTimeout(() => { if (orb.dataset.expr === 'shock') refreshFace(); }, 650);
   }
   setTimeout(() => { squash.classList.remove('poked'); poking = false; }, 520);
 }
@@ -331,14 +399,14 @@ function onPointerEnd() {
     squash.style.transform = '';
     squash.classList.add('wobble');
     setTimeout(() => squash.classList.remove('wobble'), 720);
+    toIdle(); // 先回 idle，refreshFace 才不会被 drag 守卫拦住
     // 松手落地：20% 概率晕一下
     if (Math.random() < .2) {
       setExpr('dizzy');
-      setTimeout(() => { if (orb.dataset.expr === 'dizzy') setExpr('default'); }, 900);
+      setTimeout(() => { if (orb.dataset.expr === 'dizzy') refreshFace(); }, 900);
     } else {
-      setExpr('default');
+      refreshFace();
     }
-    toIdle();
   } else {
     poke();
   }
@@ -361,7 +429,7 @@ function talk() {
   // 说话时 40% 冒爱心眼
   if (Math.random() < .4) {
     setExpr('love');
-    setTimeout(() => { if (orb.dataset.expr === 'love') setExpr('default'); }, 2200);
+    setTimeout(() => { if (orb.dataset.expr === 'love') refreshFace(); }, 2200);
   }
   say(talkTexts[Math.floor(Math.random() * talkTexts.length)], 2200);
   setTimeout(() => { orb.classList.remove('talking'); talking = false; }, 2200);

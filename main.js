@@ -143,6 +143,23 @@ function createWindow() {
     win.webContents.send('cursor-pos', { x: p.x, y: p.y, wx: b.x + b.width / 2, wy: b.y + b.height / 2 });
   }, 120);
 
+  // Kimi Code 联动：轮询 hook 写入的 agent 状态文件，变化时转发渲染层（带 TTL 兜底）
+  // KIMI_PET_STATE_FILE 可覆盖路径：测试时用独立路径，避免被真实 hook 状态污染
+  const agentStateFile = process.env.KIMI_PET_STATE_FILE || path.join(app.getPath('userData'), 'agent-state.json');
+  let lastAgent = 'idle';
+  setInterval(() => {
+    if (!win) return;
+    let s = null;
+    try { s = JSON.parse(fs.readFileSync(agentStateFile, 'utf8')); } catch {}
+    const TTL = { done: 3500, error: 5000 }; // 工作类状态 60s 没新事件才恢复（覆盖长时间纯思考）
+    let state = 'idle';
+    if (s && Number.isFinite(s.ts) && Date.now() - s.ts < (TTL[s.state] || 60000)) state = s.state;
+    if (state !== lastAgent) {
+      lastAgent = state;
+      win.webContents.send('agent-state', { state });
+    }
+  }, 500);
+
   // 滚轮缩放：往上滚变大，往下滚变小，步进 8%，以鼠标位置为锚点
   // ax/ay 与 vw/vh 同为渲染层视口坐标，相除即锚点相对位置，与 zoom 坐标语义无关
   ipcMain.on('pet-resize', (event, { dy, ax, ay, vw, vh }) => {
