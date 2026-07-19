@@ -101,7 +101,7 @@
 if (!window.petAPI) {
   window.petAPI = {
     step: () => {}, onStepDone: () => {}, dragStart: () => {}, dragTo: () => {}, resize: () => {},
-    onScale: () => {}, onCursor: () => {}, onToggleSleep: () => {}, onTalk: () => {}
+    onScale: () => {}, onCursor: () => {}, onMode: () => {}, onToggleSleep: () => {}, onTalk: () => {}
   };
 }
 
@@ -121,8 +121,8 @@ function orbSvg() {
   <g class="eye-track">
   <g class="eyes-wrap">
     <g class="expr expr-default">
-      <rect x="66" y="70" width="22" height="34" rx="11" fill="#ffffff"/>
-      <rect x="112" y="70" width="22" height="34" rx="11" fill="#ffffff"/>
+      <rect x="67" y="67" width="20" height="40" rx="10" fill="#ffffff"/>
+      <rect x="113" y="67" width="20" height="40" rx="10" fill="#ffffff"/>
     </g>
     <g class="expr expr-happy">
       <path d="M64 92 Q77 76 90 92" stroke="#ffffff" stroke-width="9" fill="none" stroke-linecap="round"/>
@@ -185,6 +185,12 @@ function say(text, ms) {
 
 /* ---------- 状态机：idle / walk / sleep / drag ---------- */
 let state = 'idle';
+/* ---------- 行为模式：stay 乖乖待着（不散步）/ kolo 到处乱跑 ---------- */
+let mode = 'kolo';
+petAPI.onMode(m => {
+  mode = m;
+  if (m === 'stay' && state === 'walk') toIdle(); // 正在走路也原地停下
+});
 let dir = Math.random() < .5 ? 1 : -1;
 let stateTimer = null, stepTimer = null, walkStopTimer = null, sleepTimer = null;
 
@@ -206,8 +212,8 @@ function toIdle() {
 function decide() {
   if (state !== 'idle') return;
   const r = Math.random();
-  if (r < .55) startWalk();
-  else if (r < .75) startSleep();
+  if (mode === 'kolo' && r < .55) startWalk();          // stay 模式不散步
+  else if (r < (mode === 'kolo' ? .75 : .2)) startSleep();
   else stateTimer = setTimeout(decide, 3000 + Math.random() * 4000);
 }
 
@@ -241,7 +247,7 @@ function wake(angry) {
   if (angry) {
     setExpr('angry');
     say('……干嘛啦', 1200);
-    setTimeout(() => setExpr('default'), 1500);
+    setTimeout(() => { if (orb.dataset.expr === 'angry') setExpr('default'); }, 1500);
   } else {
     setExpr('default');
     squash.classList.add('wobble');
@@ -263,7 +269,8 @@ function poke() {
   say(pokeTexts[Math.floor(Math.random() * pokeTexts.length)], 750);
   if (Math.random() < .35) {
     setExpr('shock');
-    setTimeout(() => setExpr('default'), 650);
+    // 竞态防护：复位时若表情已被别的状态（如睡觉）改掉，不再覆盖回 default
+    setTimeout(() => { if (orb.dataset.expr === 'shock') setExpr('default'); }, 650);
   }
   setTimeout(() => { squash.classList.remove('poked'); poking = false; }, 520);
 }
@@ -273,6 +280,7 @@ let pressX = 0, pressY = 0;
 let lastX = 0, lastY = 0, lastT = 0;
 
 orb.addEventListener('pointerdown', e => {
+  if (e.button !== 0) return; // 只响应左键：右键只开菜单，不能戳（否则 35% 触发圆形震惊眼）
   pressing = true; dragging = false;
   // 注意：必须用 screenX（屏幕绝对坐标）。clientX 是相对窗口的，
   // 窗口跟着鼠标一动，clientX 就被自己的移动抵消，形成反馈（实测拖到一半速）
@@ -303,7 +311,11 @@ window.addEventListener('pointermove', e => {
   }
 });
 
-window.addEventListener('pointerup', () => {
+window.addEventListener('pointerup', onPointerEnd);
+// 指针被系统/菜单打断（pointercancel）时走同一套清理，防止 pressing/dragging 卡死
+window.addEventListener('pointercancel', onPointerEnd);
+
+function onPointerEnd() {
   if (!pressing) return;
   pressing = false;
   if (dragging) {
@@ -317,7 +329,7 @@ window.addEventListener('pointerup', () => {
   } else {
     poke();
   }
-});
+}
 
 /* ---------- 说话 ---------- */
 const talkTexts = [

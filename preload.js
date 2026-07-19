@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('petAPI', {
   onScale: (cb) => ipcRenderer.on('pet-scale', (_e, s) => cb(s)),
   // 主进程通报光标屏幕坐标（眼睛追踪用）
   onCursor: (cb) => ipcRenderer.on('cursor-pos', (_e, p) => cb(p)),
+  // 主进程通报行为模式（stay / kolo）
+  onMode: (cb) => ipcRenderer.on('set-mode', (_e, m) => cb(m)),
   // 调试用：查询主进程权威状态
   debugState: () => ipcRenderer.invoke('pet-debug-state'),
   // 调试用：测试时开关鼠标穿透

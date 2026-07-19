@@ -88,8 +88,10 @@ try {
   check('T1 窗口宽', g1.w, Math.round(240 * 1.26), 2);
   check('T1 zoom=scale', g1.zoom, g1.scale, 0.01);
   check('T1 视口宽仍240', g1.iw, 240, 1);
-  check('T1 锚点居中 x 位移', g1.x - g0.x, -(g1.w - g0.w) / 2, 2);
-  // y 轴贴底会触发边缘钳制：期望值 = min(居中锚点, 最大 y)
+  // 锚点居中，但贴边会触发钳制：期望值 = clamp(居中锚点)
+  const maxX = g1.area.x + g1.area.width - g1.w;
+  const expectX = Math.max(g1.area.x, Math.min(g0.x - (g1.w - g0.w) / 2, maxX));
+  check('T1 锚点+钳制 x', g1.x, expectX, 2);
   const maxY = g1.area.y + g1.area.height - g1.h;
   const expectY = Math.max(g1.area.y, Math.min(g0.y - (g1.h - g0.h) / 2, maxY));
   check('T1 锚点+钳制 y', g1.y, expectY, 2);
@@ -123,6 +125,35 @@ try {
   check('T3 拖拽 x 位移', d1.x - d0.x, expX, 2);
   check('T3 拖拽 y 位移', d1.y - d0.y, expY, 2);
   await evl(`window.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}))`);
+
+  // --- T9: 右键不触发戳（不进 shock、不出气泡） ---
+  await evl(`clearTimers(); state = 'idle'; setExpr('default');`);
+  await evl(`{
+    const o = document.getElementById('orb');
+    o.dispatchEvent(new PointerEvent('pointerdown', {button: 2, clientX: 120, clientY: 150, bubbles: true}));
+    window.dispatchEvent(new PointerEvent('pointerup', {button: 2, bubbles: true}));
+  }`);
+  await sleep(300);
+  const t9expr = await evl(`document.getElementById('orb').dataset.expr`);
+  const t9bub = await evl(`document.getElementById('bubble').classList.contains('show')`);
+  checkTrue('T9 右键不戳', t9expr === 'default' && !t9bub, `expr=${t9expr} bubble=${t9bub}`);
+
+  // --- T10: 右键后移动鼠标，窗口不应被当成拖拽跟着走 ---
+  const f0 = await geom();
+  await evl(`{
+    const o = document.getElementById('orb');
+    o.dispatchEvent(new PointerEvent('pointerdown', {button: 2, clientX: 120, clientY: 150, screenX: 500, screenY: 500, bubbles: true}));
+    // 模拟菜单吞掉 pointerup 后，鼠标划过很多点
+    for (let i = 1; i <= 5; i++) {
+      window.dispatchEvent(new PointerEvent('pointermove', {clientX: 120 + i * 20, clientY: 150, screenX: 500 + i * 20, screenY: 500, bubbles: true}));
+    }
+  }`);
+  await sleep(300);
+  const f1 = await geom();
+  const f1state = await evl(`state`);
+  check('T10 右键后 x 不跟鼠标', f1.x - f0.x, 0, 0);
+  check('T10 右键后 y 不跟鼠标', f1.y - f0.y, 0, 0);
+  checkTrue('T10 未进入拖拽态', f1state !== 'drag', `state=${f1state}`);
 
   // --- T4: 大尺寸气泡：完整 + 贴在头顶上方 ---
   await evl(`clearTimers(); state = 'idle';`);
@@ -178,6 +209,20 @@ try {
   await sleep(500);
   const shot3 = await cmd('Page.captureScreenshot', { format: 'png' });
   writeFileSync('shot-normal.png', Buffer.from(shot3.data, 'base64'));
+
+  // --- T8: stay 模式不散步，kolo 模式会散步 ---
+  await evl(`mode = 'stay'`);
+  let walks = 0;
+  for (let i = 0; i < 30; i++) {
+    if (await evl(`clearTimers(); state = 'idle'; decide(); state`) === 'walk') walks++;
+  }
+  checkTrue('T8 stay 模式 30 次 decide 从不散步', walks === 0, `walks=${walks}`);
+  await evl(`mode = 'kolo'`);
+  walks = 0;
+  for (let i = 0; i < 30; i++) {
+    if (await evl(`clearTimers(); state = 'idle'; decide(); state`) === 'walk') walks++;
+  }
+  checkTrue('T8 kolo 模式 30 次 decide 至少散一次步', walks > 0, `walks=${walks}`);
 } finally {
   await evl(`petAPI.debugIgnoreMouse(false)`).catch(() => {});
 }

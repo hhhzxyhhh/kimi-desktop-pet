@@ -42,8 +42,8 @@ app.whenReady().then(async () => {
   const traySvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="36" height="36">
     <mask id="m">
       <ellipse cx="100" cy="112" rx="86" ry="79" fill="white"/>
-      <rect x="66" y="70" width="22" height="34" rx="11" fill="black"/>
-      <rect x="112" y="70" width="22" height="34" rx="11" fill="black"/>
+      <rect x="67" y="67" width="20" height="40" rx="10" fill="black"/>
+      <rect x="113" y="67" width="20" height="40" rx="10" fill="black"/>
     </mask>
     <rect width="200" height="200" fill="black" mask="url(#m)"/>
   </svg>`;
