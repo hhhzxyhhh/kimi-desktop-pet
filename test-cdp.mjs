@@ -155,6 +155,45 @@ try {
   check('T10 右键后 y 不跟鼠标', f1.y - f0.y, 0, 0);
   checkTrue('T10 未进入拖拽态', f1state !== 'drag', `state=${f1state}`);
 
+  // --- T11: 拖拽松手 20% 概率晕眩（控 Math.random 走两个分支） ---
+  const dragOnce = () => evl(`{
+    const o = document.getElementById('orb');
+    o.dispatchEvent(new PointerEvent('pointerdown', {clientX: 150, clientY: 150, screenX: 500, screenY: 500, bubbles: true}));
+    window.dispatchEvent(new PointerEvent('pointermove', {clientX: 90, clientY: 120, screenX: 440, screenY: 470, bubbles: true}));
+    window.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+  }`);
+  await evl(`clearTimers(); state = 'idle'; setExpr('default'); window.__r = Math.random; Math.random = () => 0.1;`);
+  await dragOnce();
+  await sleep(200);
+  const t11a = await evl(`document.getElementById('orb').dataset.expr`);
+  checkTrue('T11 松手低概率分支晕眩', t11a === 'dizzy', `expr=${t11a}`);
+  await sleep(900);
+  const t11b = await evl(`document.getElementById('orb').dataset.expr`);
+  checkTrue('T11 晕眩后回神', t11b === 'default', `expr=${t11b}`);
+  await evl(`clearTimers(); state = 'idle'; setExpr('default'); Math.random = () => 0.9;`);
+  await dragOnce();
+  await sleep(200);
+  const t11c = await evl(`document.getElementById('orb').dataset.expr`);
+  checkTrue('T11 松手高概率分支不晕', t11c === 'default', `expr=${t11c}`);
+  await evl(`Math.random = window.__r;`);
+
+  // --- T12: 自然睡醒开心，被戳醒生气 ---
+  await evl(`clearTimers(); startSleep();`);
+  await sleep(100);
+  await evl(`wake(false)`);
+  await sleep(100);
+  const t12a = await evl(`document.getElementById('orb').dataset.expr`);
+  checkTrue('T12 自然睡醒开心', t12a === 'happy', `expr=${t12a}`);
+  await sleep(1700);
+  const t12b = await evl(`document.getElementById('orb').dataset.expr`);
+  checkTrue('T12 开心后恢复', t12b === 'default', `expr=${t12b}`);
+  await evl(`clearTimers(); startSleep();`);
+  await sleep(100);
+  await evl(`wake(true)`);
+  await sleep(100);
+  const t12c = await evl(`document.getElementById('orb').dataset.expr`);
+  checkTrue('T12 被戳醒生气', t12c === 'angry', `expr=${t12c}`);
+
   // --- T4: 大尺寸气泡：完整 + 贴在头顶上方 ---
   await evl(`clearTimers(); state = 'idle';`);
   await evl(`document.getElementById('orb').dispatchEvent(new MouseEvent('dblclick', {bubbles: true}))`);

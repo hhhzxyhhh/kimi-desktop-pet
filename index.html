@@ -250,9 +250,11 @@ function wake(angry) {
     say('……干嘛啦', 1200);
     setTimeout(() => { if (orb.dataset.expr === 'angry') setExpr('default'); }, 1500);
   } else {
-    setExpr('default');
+    // 自然睡醒：开心一下再恢复
+    setExpr('happy');
     squash.classList.add('wobble');
     setTimeout(() => squash.classList.remove('wobble'), 720);
+    setTimeout(() => { if (orb.dataset.expr === 'happy') setExpr('default'); }, 1600);
   }
 }
 
@@ -279,6 +281,7 @@ function poke() {
 let pressing = false, dragging = false;
 let pressX = 0, pressY = 0;
 let lastX = 0, lastY = 0, lastT = 0;
+let dragStartT = 0;
 
 orb.addEventListener('pointerdown', e => {
   if (e.button !== 0) return; // 只响应左键：右键只开菜单，不能戳（否则 35% 触发圆形震惊眼）
@@ -294,6 +297,7 @@ window.addEventListener('pointermove', e => {
   if (!pressing) return;
   if (!dragging && Math.hypot(e.screenX - pressX, e.screenY - pressY) > 5) {
     dragging = true;
+    dragStartT = performance.now();
     clearTimers();
     state = 'drag';
     orb.classList.remove('sleeping');
@@ -302,6 +306,8 @@ window.addEventListener('pointermove', e => {
     setExpr('shock');
   }
   if (dragging) {
+    // 拎着超过 3 秒不放：从震惊变流汗
+    if (performance.now() - dragStartT > 3000 && orb.dataset.expr === 'shock') setExpr('sweat');
     petAPI.dragTo({ dx: e.screenX - pressX, dy: e.screenY - pressY });
     const now = performance.now();
     const dt = Math.max(now - lastT, 1);
@@ -325,7 +331,13 @@ function onPointerEnd() {
     squash.style.transform = '';
     squash.classList.add('wobble');
     setTimeout(() => squash.classList.remove('wobble'), 720);
-    setExpr('default');
+    // 松手落地：20% 概率晕一下
+    if (Math.random() < .2) {
+      setExpr('dizzy');
+      setTimeout(() => { if (orb.dataset.expr === 'dizzy') setExpr('default'); }, 900);
+    } else {
+      setExpr('default');
+    }
     toIdle();
   } else {
     poke();
@@ -346,6 +358,11 @@ function talk() {
   if (talking || state === 'sleep' || state === 'drag') return;
   talking = true;
   orb.classList.add('talking');
+  // 说话时 40% 冒爱心眼
+  if (Math.random() < .4) {
+    setExpr('love');
+    setTimeout(() => { if (orb.dataset.expr === 'love') setExpr('default'); }, 2200);
+  }
   say(talkTexts[Math.floor(Math.random() * talkTexts.length)], 2200);
   setTimeout(() => { orb.classList.remove('talking'); talking = false; }, 2200);
 }
