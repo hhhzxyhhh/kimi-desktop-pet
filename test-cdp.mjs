@@ -48,6 +48,17 @@ async function evl(expression) {
 const geom = () => evl(`petAPI.debugState().then(s => ({
   x: s.bounds.x, y: s.bounds.y, w: s.bounds.width, h: s.bounds.height,
   scale: s.scale, zoom: s.zoom, iw: window.innerWidth, area: s.area }))`);
+// 等到几何读数稳定（连续两次一致）再取，防窗口服务器时序抖动
+async function geomSettled() {
+  let a = await geom();
+  for (let i = 0; i < 10; i++) {
+    await sleep(120);
+    const b = await geom();
+    if (b.x === a.x && b.y === a.y && b.w === a.w && b.h === a.h) return b;
+    a = b;
+  }
+  return a;
+}
 const resize = (dy) => evl(`petAPI.resize({dy:${dy}, ax:120, ay:120, vw:window.innerWidth, vh:window.innerHeight})`);
 async function toScale(target) {
   for (let i = 0; i < 25; i++) {
@@ -121,7 +132,7 @@ try {
     window.dispatchEvent(new PointerEvent('pointermove', {clientX: 90, clientY: 120, screenX: 440, screenY: 470, bubbles: true}));
   }`);
   await sleep(300);
-  const d1 = await geom();
+  const d1 = await geomSettled();
   // macOS 会钳制窗口不许移出 workArea（比如菜单栏上方），期望值要算上钳制
   const expX = Math.max(d0.area.x, d0.x - 60) - d0.x;
   const expY = Math.max(d0.area.y, d0.y - 30) - d0.y;

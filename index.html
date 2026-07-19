@@ -283,7 +283,7 @@ function decide() {
   if (agentState) { stateTimer = setTimeout(decide, 3000); return; } // 开工期间坚守岗位，不散步不摸鱼
   const r = Math.random();
   if (mode === 'kolo' && r < .55) startWalk();          // stay 模式不散步
-  else if (r < (mode === 'kolo' ? .75 : .2)) startSleep();
+  else if (r < (mode === 'kolo' ? .65 : .2)) startSleep(); // kolo 睡 10%，stay 睡 20%
   else stateTimer = setTimeout(decide, 3000 + Math.random() * 4000);
 }
 
@@ -314,7 +314,7 @@ function startSleep() {
   squash.classList.add('breathe');
   orb.classList.add('sleeping');
   setExpr('sleepy');
-  sleepTimer = setTimeout(() => wake(false), 12000 + Math.random() * 8000);
+  sleepTimer = setTimeout(() => wake(false), 8000 + Math.random() * 6000); // 小睡 8-14 秒
 }
 
 function wake(angry) {
