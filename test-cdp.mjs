@@ -220,10 +220,30 @@ try {
   await sleep(800);
   const t13b = await evl(`document.getElementById('orb').dataset.expr`);
   checkTrue('T13 请求权限→感叹号', t13b === 'notice', `expr=${t13b}`);
-  writeAgent('working', 70000); // 70 秒前的旧状态，应被 TTL(60s) 判死
+  writeAgent('ask');
+  await sleep(800);
+  const t13q = await evl(`document.getElementById('orb').dataset.expr`);
+  checkTrue('T13 提问→问号脸', t13q === 'question', `expr=${t13q}`);
+
+  // --- T15: 睡觉时被 agent 叫醒；睡颜与 agent 脸绝不共存 ---
+  await evl(`clearTimers(); startSleep();`);
+  writeAgent('ask');
+  await sleep(900);
+  const t15 = await evl(`({
+    sleeping: document.getElementById('orb').classList.contains('sleeping'),
+    expr: document.getElementById('orb').dataset.expr
+  })`);
+  checkTrue('T15 来活叫醒（睡觉类已移除）', t15.sleeping === false, JSON.stringify(t15));
+  checkTrue('T15 叫醒后显示提问脸', t15.expr === 'question', JSON.stringify(t15));
+  await evl(`clearTimers(); document.getElementById('orb').classList.remove('sleeping'); state = 'idle';`);
+  writeAgent('working', 400000); // 400 秒前的工作状态：不过期，长期保持
   await sleep(800);
   const t13c = await evl(`document.getElementById('orb').dataset.expr`);
-  checkTrue('T13 过期状态→恢复默认', t13c === 'default', `expr=${t13c}`);
+  checkTrue('T13 工作状态无限期保持', t13c === 'focus', `expr=${t13c}`);
+  writeAgent('done', 10000); // done 是瞬时庆祝，10 秒前即过期
+  await sleep(800);
+  const t13f = await evl(`document.getElementById('orb').dataset.expr`);
+  checkTrue('T13 done 闪完即恢复', t13f === 'default', `expr=${t13f}`);
   writeAgent('working');
   await sleep(800);
   let leftPost = 0;
@@ -309,14 +329,15 @@ try {
   }
   checkTrue('T8 kolo 模式 30 次 decide 至少散一次步', walks > 0, `walks=${walks}`);
 
-  // --- T14: kolo 全屏游走（x/y 都动；撞边按轴反弹由同一钳制路径保证） ---
+  // --- T14: kolo 满屏乱跑（目标点模式，明显位移 + 向目标方向移动） ---
   const w0 = await geom();
-  await evl(`{ window.__r = Math.random; Math.random = () => 0.9; dir = 1; startWalk(); Math.random = window.__r; }`);
-  await sleep(2500);
+  await evl(`{ window.__r = Math.random; Math.random = () => 0.05; startWalk(); Math.random = window.__r; }`);
+  await sleep(3000);
   const w1 = await geom();
   await evl(`clearTimers(); state = 'idle'; squash.classList.remove('hop');`);
-  checkTrue('T14 游走时 x 也动', Math.abs(w1.x - w0.x) > 5, `dx=${(w1.x - w0.x).toFixed(1)}`);
-  checkTrue('T14 游走时 y 也动', Math.abs(w1.y - w0.y) > 2, `dy=${(w1.y - w0.y).toFixed(1)}`);
+  const moved = Math.hypot(w1.x - w0.x, w1.y - w0.y);
+  checkTrue('T14 乱跑明显位移', moved > 10, `位移=${moved.toFixed(1)}`);
+  checkTrue('T14 朝左上目标移动', w1.x < w0.x && w1.y <= w0.y, `dx=${(w1.x - w0.x).toFixed(1)} dy=${(w1.y - w0.y).toFixed(1)}`);
 } finally {
   await evl(`petAPI.debugIgnoreMouse(false)`).catch(() => {});
 }

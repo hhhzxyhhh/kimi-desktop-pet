@@ -23,15 +23,17 @@ process.stdin.on('end', () => {
 
   let state = null;
   if (ev === 'UserPromptSubmit') state = 'thinking';          // 收到任务，思考中
-  else if (ev === 'PreToolUse') {                              // 调工具：搜索类单独区分
-    state = /^(WebSearch|FetchURL)$/.test(tool) ? 'searching' : 'working';
+  else if (ev === 'PreToolUse') {                              // 调工具：提问/搜索/其他区分
+    if (tool === 'AskUserQuestion') state = 'ask';
+    else state = /^(WebSearch|FetchURL)$/.test(tool) ? 'searching' : 'working';
   }
   else if (ev === 'PermissionRequest') state = 'permission';   // 等待用户批准
+  else if (ev === 'PostToolUse') state = 'working';            // 工具完成（含问题已回答），回岗位
   else if (ev === 'PermissionResult') state = 'thinking';      // 批准完继续想
-  else if (ev === 'Stop') state = 'done';                      // 回合完成
-  else if (ev === 'Notification' && /task\.completed/.test(p.notification_type || '')) state = 'done';
+  else if (ev === 'Stop') state = 'done';                      // 回合完成（只认 Stop，后台任务通知不算）
   else if (ev === 'StopFailure') state = 'error';              // 回合失败
-  else if (ev === 'Interrupt' || ev === 'SessionEnd') state = 'idle';
+  else if (ev === 'Interrupt' || ev === 'SessionEnd' || ev === 'SessionStart') state = 'idle';
+  // SessionStart 也复位（参考 Clawd On Desk）：新会话不继承上一个死会话的残留状态
 
   if (!state) return; // 不关心的事件（PostToolUse 等）直接忽略
   try {

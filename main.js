@@ -35,21 +35,34 @@ function ensureAgentHook() {
     const kimiHome = process.env.KIMI_CODE_HOME || path.join(os.homedir(), '.kimi-code');
     if (!fs.existsSync(kimiHome)) return; // 没装 Kimi Code，跳过
     const MARK = 'pet-hook.cjs';
+    const EVENTS = ['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PermissionRequest', 'PermissionResult',
+      'Stop', 'StopFailure', 'Interrupt', 'SessionStart', 'SessionEnd', 'Notification'];
     const hookDst = path.join(kimiHome, 'hooks', MARK);
     const cfg = path.join(kimiHome, 'config.toml');
     const cfgText = fs.existsSync(cfg) ? fs.readFileSync(cfg, 'utf8') : '';
     const st = loadSettings();
     if (cfgText.includes(MARK)) {
+      // 已安装：同步脚本内容，并补齐新增事件（老配置自动升级）
+      const src = fs.readFileSync(path.join(__dirname, MARK), 'utf8');
+      const dst = fs.existsSync(hookDst) ? fs.readFileSync(hookDst, 'utf8') : '';
+      if (src !== dst) fs.copyFileSync(path.join(__dirname, MARK), hookDst);
+      // 注意按"同一 hook 块内既有事件名又有 pet-hook.cjs"判断，别家 hook 的同名事件不算
+      const missing = EVENTS.filter(e =>
+        !new RegExp(`event\\s*=\\s*"${e}"[\\s\\S]{0,200}pet-hook\\.cjs`).test(cfgText));
+      if (missing.length) {
+        const block = missing.map(e =>
+          `\n[[hooks]]\nevent = "${e}"\ncommand = "node \\"${hookDst}\\""\ntimeout = 3\n`).join('');
+        fs.appendFileSync(cfg, block);
+        console.log('[agent-link] 已补充 hook 事件:', missing.join(', '));
+      }
       if (!st.agentLinkInstalled) {
         fs.writeFileSync(settingsFile(), JSON.stringify({ ...st, agentLinkInstalled: true }));
       }
-      return; // 已安装
+      return;
     }
     if (st.agentLinkInstalled) return; // 用户手动卸载过，不再自动装
     fs.mkdirSync(path.dirname(hookDst), { recursive: true });
     fs.copyFileSync(path.join(__dirname, MARK), hookDst);
-    const EVENTS = ['UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'PermissionResult',
-      'Stop', 'StopFailure', 'Interrupt', 'SessionEnd', 'Notification'];
     const block = EVENTS.map(e =>
       `\n[[hooks]]\nevent = "${e}"\ncommand = "node \\"${hookDst}\\""\ntimeout = 3\n`).join('');
     fs.appendFileSync(cfg, block);
@@ -169,26 +182,36 @@ function createWindow() {
     win.webContents.send('set-mode', mode);
   });
 
-  // 光标位置轮询：渲染层收不到窗口外的鼠标事件，主进程代查屏幕坐标发过去（眼睛追踪用）
+  // 光标位置轮询：渲染层收不到窗口外的鼠标事件，主进程代查屏幕坐标发过去（眼睛追踪 + 游走定位用）
   setInterval(() => {
     if (!win) return;
     const p = screen.getCursorScreenPoint();
     const b = win.getBounds();
-    win.webContents.send('cursor-pos', { x: p.x, y: p.y, wx: b.x + b.width / 2, wy: b.y + b.height / 2 });
+    win.webContents.send('cursor-pos', {
+      x: p.x, y: p.y, wx: b.x + b.width / 2, wy: b.y + b.height / 2,
+      area: screen.getPrimaryDisplay().workArea
+    });
   }, 120);
 
   // Kimi Code 联动：轮询 hook 写入的 agent 状态文件，变化时转发渲染层（带 TTL 兜底）
   // KIMI_PET_STATE_FILE 可覆盖路径：测试时用独立路径，避免被真实 hook 状态污染
   const agentStateFile = process.env.KIMI_PET_STATE_FILE || path.join(app.getPath('userData'), 'agent-state.json');
-  let lastAgent = 'idle';
+  let lastAgent = 'idle', lastTs = 0;
   setInterval(() => {
     if (!win) return;
     let s = null;
     try { s = JSON.parse(fs.readFileSync(agentStateFile, 'utf8')); } catch {}
-    const TTL = { done: 3500, error: 5000 }; // 工作类状态 60s 没新事件才恢复（覆盖长时间纯思考）
+    // 状态一直保持到下一个信号；只有 done/error 是瞬时庆祝，闪一下就恢复
+    const FLASH_TTL = { done: 3500, error: 5000 };
     let state = 'idle';
-    if (s && Number.isFinite(s.ts) && Date.now() - s.ts < (TTL[s.state] || 60000)) state = s.state;
-    if (state !== lastAgent) {
+    if (s && Number.isFinite(s.ts)) {
+      const flash = FLASH_TTL[s.state];
+      if (!flash || Date.now() - s.ts < flash) state = s.state;
+    }
+    // 同状态重复写入也是"新事件"（再次提问/连续调工具），要重新通报，否则叫醒不可靠
+    const isNewEvent = !!(s && Number.isFinite(s.ts) && s.ts !== lastTs);
+    if (isNewEvent) lastTs = s.ts;
+    if (state !== lastAgent || isNewEvent) {
       lastAgent = state;
       win.webContents.send('agent-state', { state });
     }

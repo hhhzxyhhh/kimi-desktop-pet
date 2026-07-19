@@ -48,6 +48,8 @@
   .orb[data-expr="sweat"] .sweat { display: block; }
   .orb[data-expr="notice"] .expr-ask,
   .orb[data-expr="notice"] .bang { display: block; }
+  .orb[data-expr="question"] .expr-ask,
+  .orb[data-expr="question"] .acc-qmark { display: block; }
   .acc-gear { transform-box: fill-box; transform-origin: center; animation: gearSpin 1.4s linear infinite; }
   @keyframes gearSpin { to { transform: rotate(360deg); } }
   .acc-keyboard circle { opacity: .18; animation: keyTap .72s ease-in-out infinite; }
@@ -200,7 +202,11 @@ function orbSvg() {
     <circle cx="138" cy="156" r="3" fill="#1983FC"/>
     <rect x="60" y="166" width="80" height="6" rx="3" fill="#1983FC" opacity=".35"/>
   </g>
-  <path class="bang" d="M149 48 h8 v24 h-8 Z M153 80 m-5 0 a5 5 0 1 0 10 0 a5 5 0 1 0 -10 0" fill="#ffd166"/>
+  <g class="acc acc-qmark" stroke="#ff5252" stroke-width="15" fill="none" stroke-linecap="round">
+    <path d="M128 40 a24 24 0 1 1 36 27 c-8 7 -14 11 -14 21"/>
+    <circle cx="150" cy="116" r="9" fill="#ff5252" stroke="none"/>
+  </g>
+  <path class="bang" d="M150 22 h22 a8 8 0 0 1 8 8 v58 a8 8 0 0 1 -8 8 h-22 a8 8 0 0 1 -8 -8 v-58 a8 8 0 0 1 8 -8 Z M161 116 m-13 0 a13 13 0 1 0 26 0 a13 13 0 1 0 -26 0" fill="#ff5252"/>
   <path class="sweat" d="M152 52 C162 68 164 76 152 84 C140 76 142 68 152 52 Z" fill="#9fdcff"/>
 </svg>`;
 }
@@ -245,22 +251,25 @@ petAPI.onMode(m => {
 
 /* ---------- Kimi Code 联动：agent 状态覆盖表情（drag/sleep 时不打扰） ---------- */
 let agentState = null;
-const agentExprMap = { thinking: 'think', working: 'focus', searching: 'search', permission: 'notice', done: 'happy', error: 'dizzy' };
+const agentExprMap = { thinking: 'think', working: 'focus', searching: 'search', permission: 'notice', ask: 'question', done: 'happy', error: 'dizzy' };
 petAPI.onAgentState(({ state: s }) => {
   const was = agentState;
   agentState = s === 'idle' ? null : s;
   if (agentState === 'done' && was !== 'done') say('搞定！', 1500);
   if (agentState && state === 'sleep') wake(false);      // 来活了叫醒
+  else if (agentState && orb.classList.contains('sleeping')) orb.classList.remove('sleeping'); // 状态/类名兜底同步
   else if (agentState && state === 'walk') toIdle();     // 开工期间原地上班，不乱跑
   refreshFace();
 });
 function refreshFace() {
-  if (state === 'drag' || state === 'sleep') return; // 拖拽/睡颜优先，不打扰
+  // 拖拽/睡觉（含类名残留）优先，agent 表情绝不允许盖上去
+  if (state === 'drag' || state === 'sleep' || orb.classList.contains('sleeping')) return;
   if (agentState) setExpr(agentExprMap[agentState] || 'default');
   else setExpr('default');
 }
-let dir = Math.random() < .5 ? 1 : -1;
 let vx = 0, vy = 0; // 游走速度向量（像素/蹦跳周期）
+let walkTX = 0, walkTY = 0; // 本次散步的目的地（屏幕坐标）
+let winCX = 0, winCY = 0, winArea = null; // 窗口中心与屏幕工作区（主进程光标轮询顺带发回）
 let stateTimer = null, stepTimer = null, walkStopTimer = null, sleepTimer = null;
 
 function clearTimers() {
@@ -292,14 +301,20 @@ function startWalk() {
   state = 'walk';
   squash.classList.remove('breathe');
   squash.classList.add('hop');
-  // 台球式全屏游走：以水平为主、带 ±15~40° 纵向浮动，撞到四边按轴反弹
-  // 步长按体型缩放（240px 身材每跳 9px）；一个蹦跳周期拆 6 小步保持平滑
-  const ang = (15 + Math.random() * 25) * Math.PI / 180 * (Math.random() < .5 ? 1 : -1);
-  const spd = 9 * curScale;
-  vx = Math.cos(ang) * spd * dir;
-  vy = Math.sin(ang) * spd;
-  stepTimer = setInterval(() => petAPI.step({ dx: vx / 6, dy: vy / 6 }), 97);
-  walkStopTimer = setTimeout(() => toIdle(), 5000 + Math.random() * 7000);
+  // 满屏乱跑：全屏随机选个目的地，直线蹦过去；到达或超时收工
+  const size = 240 * curScale;
+  const a = winArea || { x: 0, y: 38, width: 1512, height: 876 };
+  walkTX = a.x + Math.random() * (a.width - size);
+  walkTY = a.y + Math.random() * (a.height - size);
+  const spd = 9 * Math.max(curScale, 0.6);
+  stepTimer = setInterval(() => {
+    const dx = walkTX + size / 2 - winCX, dy = walkTY + size / 2 - winCY;
+    const d = Math.hypot(dx, dy);
+    if (d < spd * 1.5) { toIdle(); return; } // 到目的地了
+    vx = dx / d * spd; vy = dy / d * spd;
+    petAPI.step({ dx: vx / 6, dy: vy / 6 });
+  }, 97);
+  walkStopTimer = setTimeout(() => toIdle(), 6000 + Math.random() * 6000);
 }
 
 petAPI.onStepDone(({ flipX, flipY }) => {
@@ -455,7 +470,8 @@ orb.addEventListener('wheel', e => {
 // 主进程轮询屏幕光标坐标发过来：看向屏幕上任意处的鼠标，不只窗口内
 // 偏移量最多 5 CSS px（随 zoom 等比放大，眼球越大动得越多，自然）
 function eyeTrack() { return squash.querySelector('.eye-track'); }
-petAPI.onCursor(({ x, y, wx, wy }) => {
+petAPI.onCursor(({ x, y, wx, wy, area }) => {
+  winCX = wx; winCY = wy; winArea = area; // 游走定位顺带更新
   if (pressing || state === 'sleep') return;
   const dx = x - wx, dy = y - wy;
   const d = Math.hypot(dx, dy) || 1;
