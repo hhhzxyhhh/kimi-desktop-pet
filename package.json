@@ -21,6 +21,7 @@
       "main.js",
       "preload.js",
       "index.html",
+      "pet-hook.cjs",
       "assets"
     ],
     "mac": {

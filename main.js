@@ -3,6 +3,7 @@
 const { app, BrowserWindow, Menu, Tray, nativeImage, ipcMain, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 
 const SIZE = 240; // 基准边长（正方形，宠物住在底部，上方留白给气泡和 zzz）
 const MIN_SCALE = 0.4, MAX_SCALE = 2.5; // 滚轮缩放的上下限（96px ~ 600px）
@@ -22,8 +23,41 @@ function saveSettings() {
   saveTimer = setTimeout(() => {
     if (!win) return;
     const [x, y] = win.getPosition();
-    fs.writeFile(settingsFile(), JSON.stringify({ scale, x, y, mode }), () => {});
+    // 合并保留其他键（如 agentLinkInstalled），不整个覆盖
+    fs.writeFile(settingsFile(), JSON.stringify({ ...loadSettings(), scale, x, y, mode }), () => {});
   }, 400);
+}
+
+// Kimi Code 联动自动安装：检测到 Kimi Code 家目录就把 hook 装好。
+// 用户手动卸载过（settings 有安装标记但配置已没了）则尊重，不再自动装。
+function ensureAgentHook() {
+  try {
+    const kimiHome = process.env.KIMI_CODE_HOME || path.join(os.homedir(), '.kimi-code');
+    if (!fs.existsSync(kimiHome)) return; // 没装 Kimi Code，跳过
+    const MARK = 'pet-hook.cjs';
+    const hookDst = path.join(kimiHome, 'hooks', MARK);
+    const cfg = path.join(kimiHome, 'config.toml');
+    const cfgText = fs.existsSync(cfg) ? fs.readFileSync(cfg, 'utf8') : '';
+    const st = loadSettings();
+    if (cfgText.includes(MARK)) {
+      if (!st.agentLinkInstalled) {
+        fs.writeFileSync(settingsFile(), JSON.stringify({ ...st, agentLinkInstalled: true }));
+      }
+      return; // 已安装
+    }
+    if (st.agentLinkInstalled) return; // 用户手动卸载过，不再自动装
+    fs.mkdirSync(path.dirname(hookDst), { recursive: true });
+    fs.copyFileSync(path.join(__dirname, MARK), hookDst);
+    const EVENTS = ['UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'PermissionResult',
+      'Stop', 'StopFailure', 'Interrupt', 'SessionEnd', 'Notification'];
+    const block = EVENTS.map(e =>
+      `\n[[hooks]]\nevent = "${e}"\ncommand = "node \\"${hookDst}\\""\ntimeout = 3\n`).join('');
+    fs.appendFileSync(cfg, block);
+    fs.writeFileSync(settingsFile(), JSON.stringify({ ...st, agentLinkInstalled: true }));
+    console.log('[agent-link] hook 已自动安装到', hookDst);
+  } catch (e) {
+    console.log('[agent-link] 自动安装跳过:', e.message);
+  }
 }
 
 // 切换行为模式并通报渲染层
@@ -226,6 +260,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  ensureAgentHook(); // Kimi Code 联动：有则装，无则跳过，手动卸过尊重
   createWindow();
 
   // 托盘：macOS 菜单栏 / Windows 系统托盘，和右键同一套菜单
@@ -249,10 +284,10 @@ app.on('window-all-closed', () => {
   app.quit();
 });
 
-// 退出前把状态同步落盘（日常防抖 400ms，退出时可能等不到）
+// 退出前把状态同步落盘（日常防抖 400ms，退出时可能等不到；合并保留其他键）
 app.on('before-quit', () => {
   clearTimeout(saveTimer);
   if (!win) return;
   const [x, y] = win.getPosition();
-  try { fs.writeFileSync(settingsFile(), JSON.stringify({ scale, x, y, mode })); } catch {}
+  try { fs.writeFileSync(settingsFile(), JSON.stringify({ ...loadSettings(), scale, x, y, mode })); } catch {}
 });

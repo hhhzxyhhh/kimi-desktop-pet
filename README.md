@@ -48,7 +48,9 @@ npm start
 
 ## 联动 Kimi Code（可选，默认开启）
 
-通过 Kimi Code CLI 的 hooks 机制同步 agent 状态（事件 → `~/.kimi-code/hooks/pet-hook.cjs` → 状态文件 → 桌宠轮询）：
+**开箱自动安装**：首次启动时若检测到 `~/.kimi-code`（即你装了 Kimi Code CLI），会自动把 hook 脚本和 `config.toml` 规则配好，无需任何手动操作；如果你之后手动卸掉，它不会再来烦你（不重复自动装）。没装 Kimi Code 则自动跳过。
+
+联动原理：Kimi Code hooks 事件 → `~/.kimi-code/hooks/pet-hook.cjs` → 状态文件 → 桌宠轮询：
 
 | Kimi Code 状态 | 桌宠表情 |
 | --- | --- |
