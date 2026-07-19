@@ -23,9 +23,9 @@ jobs:
         shell: bash
         run: |
           if [ "${{ matrix.os }}" = "macos-latest" ]; then
-            npm run dist:mac
+            npx electron-builder --mac --publish never
           else
-            npm run dist:win
+            npx electron-builder --win --publish never
           fi
       - uses: actions/upload-artifact@v4
         with:
