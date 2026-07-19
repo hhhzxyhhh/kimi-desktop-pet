@@ -212,23 +212,25 @@ function createWindow() {
   // 位置变化持久化（拖拽/走路/钳制都会触发，已防抖）
   win.on('move', saveSettings);
 
-  // 宠物走一步：窗口平移 dx，撞到屏幕边缘则回报 flipped 让渲染进程掉头
-  // dx 可能不足 1px（小体型拆细步），小数部分累积进下一步，避免取整偏差
-  let stepFrac = 0;
-  ipcMain.on('pet-step', (event, dx) => {
+  // 宠物走一步：窗口平移 {dx,dy}，撞到屏幕边缘则按轴回报反弹
+  // 分量可能不足 1px（小体型拆细步），小数部分按轴累积进下一步，避免取整偏差
+  let stepFracX = 0, stepFracY = 0;
+  ipcMain.on('pet-step', (event, { dx, dy }) => {
     if (!win) return;
     const [x, y] = win.getPosition();
     const size = win.getSize()[0];
     const area = screen.getPrimaryDisplay().workArea;
-    stepFrac += dx;
-    const move = Math.trunc(stepFrac);
-    stepFrac -= move;
-    let nx = x + move;
-    let flipped = false;
-    if (nx <= area.x) { nx = area.x; flipped = true; }
-    if (nx >= area.x + area.width - size) { nx = area.x + area.width - size; flipped = true; }
-    win.setPosition(nx, y);
-    event.reply('pet-step-done', flipped);
+    stepFracX += dx; stepFracY += dy;
+    const mx = Math.trunc(stepFracX), my = Math.trunc(stepFracY);
+    stepFracX -= mx; stepFracY -= my;
+    let nx = x + mx, ny = y + my;
+    let flipX = false, flipY = false;
+    if (nx <= area.x) { nx = area.x; flipX = true; }
+    if (nx >= area.x + area.width - size) { nx = area.x + area.width - size; flipX = true; }
+    if (ny <= area.y) { ny = area.y; flipY = true; }
+    if (ny >= area.y + area.height - size) { ny = area.y + area.height - size; flipY = true; }
+    win.setPosition(nx, ny);
+    event.reply('pet-step-done', { flipX, flipY });
   });
 
   // 拖拽开始：主进程记下窗口当前位置

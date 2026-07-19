@@ -260,6 +260,7 @@ function refreshFace() {
   else setExpr('default');
 }
 let dir = Math.random() < .5 ? 1 : -1;
+let vx = 0, vy = 0; // 游走速度向量（像素/蹦跳周期）
 let stateTimer = null, stepTimer = null, walkStopTimer = null, sleepTimer = null;
 
 function clearTimers() {
@@ -291,13 +292,20 @@ function startWalk() {
   state = 'walk';
   squash.classList.remove('breathe');
   squash.classList.add('hop');
-  // 步长按体型缩放（240px 身材每跳 9px）；一个蹦跳周期拆 6 小步，
-  // 小体型下 OS 窗口的离散大跳才是"一卡一卡"的来源，拆细后是平滑挪动
-  stepTimer = setInterval(() => petAPI.step(9 * dir * curScale / 6), 97);
+  // 台球式全屏游走：以水平为主、带 ±15~40° 纵向浮动，撞到四边按轴反弹
+  // 步长按体型缩放（240px 身材每跳 9px）；一个蹦跳周期拆 6 小步保持平滑
+  const ang = (15 + Math.random() * 25) * Math.PI / 180 * (Math.random() < .5 ? 1 : -1);
+  const spd = 9 * curScale;
+  vx = Math.cos(ang) * spd * dir;
+  vy = Math.sin(ang) * spd;
+  stepTimer = setInterval(() => petAPI.step({ dx: vx / 6, dy: vy / 6 }), 97);
   walkStopTimer = setTimeout(() => toIdle(), 5000 + Math.random() * 7000);
 }
 
-petAPI.onStepDone(flipped => { if (flipped) dir *= -1; });
+petAPI.onStepDone(({ flipX, flipY }) => {
+  if (flipX) vx = -vx;
+  if (flipY) vy = -vy;
+});
 
 function startSleep() {
   clearTimers();

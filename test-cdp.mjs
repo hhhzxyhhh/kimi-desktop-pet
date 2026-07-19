@@ -297,6 +297,15 @@ try {
     if (await evl(`clearTimers(); state = 'idle'; decide(); state`) === 'walk') walks++;
   }
   checkTrue('T8 kolo 模式 30 次 decide 至少散一次步', walks > 0, `walks=${walks}`);
+
+  // --- T14: kolo 全屏游走（x/y 都动；撞边按轴反弹由同一钳制路径保证） ---
+  const w0 = await geom();
+  await evl(`{ window.__r = Math.random; Math.random = () => 0.9; dir = 1; startWalk(); Math.random = window.__r; }`);
+  await sleep(2500);
+  const w1 = await geom();
+  await evl(`clearTimers(); state = 'idle'; squash.classList.remove('hop');`);
+  checkTrue('T14 游走时 x 也动', Math.abs(w1.x - w0.x) > 5, `dx=${(w1.x - w0.x).toFixed(1)}`);
+  checkTrue('T14 游走时 y 也动', Math.abs(w1.y - w0.y) > 2, `dy=${(w1.y - w0.y).toFixed(1)}`);
 } finally {
   await evl(`petAPI.debugIgnoreMouse(false)`).catch(() => {});
 }
