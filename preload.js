@@ -31,6 +31,6 @@ contextBridge.exposeInMainWorld('petAPI', {
   // 右键菜单事件
   onToggleSleep: (cb) => ipcRenderer.on('toggle-sleep', () => cb()),
   onTalk: (cb) => ipcRenderer.on('talk', () => cb()),
-  // 主进程气泡通报（装终端进度等）
-  onToast: (cb) => ipcRenderer.on('pet-toast', (_e, t) => cb(t))
+  // 主进程气泡通报（装终端进度等；sticky 时气泡常驻等用户点掉）
+  onToast: (cb) => ipcRenderer.on('pet-toast', (_e, p) => cb(p))
 });

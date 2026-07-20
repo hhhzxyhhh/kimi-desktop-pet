@@ -95,6 +95,8 @@
     transition: transform .18s cubic-bezier(.34,1.56,.64,1); pointer-events: none;
   }
   .bubble.show { transform: translateX(-50%) scale(1); }
+  /* 常驻气泡可点击关闭 */
+  .bubble.clickable { pointer-events: auto; cursor: pointer; }
   /* 气泡主体反向补偿窗口 zoom，任何尺寸下保持固定视觉大小 */
   /* 气泡主体：反向补偿窗口 zoom，保持固定视觉大小；装不下时收敛，绝不截断 */
   .bubble-body {
@@ -257,10 +259,21 @@ petAPI.onScale(s => {
 function say(text, ms) {
   bubbleBody.textContent = text;
   fitBubble();
-  bubble.classList.add('show');
   clearTimeout(bubbleTimer);
+  bubble.classList.remove('clickable');
+  bubble.classList.add('show');
   bubbleTimer = setTimeout(() => bubble.classList.remove('show'), ms || 1600);
 }
+
+// 常驻气泡：不自动消失，点一下才关（重要提示用，比如"要输密码哦"）
+function saySticky(text) {
+  bubbleBody.textContent = text;
+  fitBubble();
+  clearTimeout(bubbleTimer);
+  bubble.classList.add('show', 'clickable');
+}
+// 点常驻气泡关闭
+bubble.addEventListener('click', () => bubble.classList.remove('show', 'clickable'));
 
 /* ---------- 状态机：idle / walk / sleep / drag ---------- */
 let state = 'idle';
@@ -522,7 +535,7 @@ function talk() {
   setTimeout(() => { orb.classList.remove('talking'); talking = false; }, 2200);
 }
 petAPI.onTalk(talk);
-petAPI.onToast(t => say(t, 3000)); // 主进程通报（装 Ghostty 进度等）
+petAPI.onToast(p => p.sticky ? saySticky(p.text) : say(p.text, 3000)); // 主进程通报（装 Ghostty 进度等）
 orb.addEventListener('dblclick', () => openKimiTerm()); // 双击开 Kimi Code 终端（说话走右键菜单）
 // 独立函数：测试时替换它来拦截双击（contextBridge 暴露的对象是冻结的，stub 不了）
 function openKimiTerm() { petAPI.openTerminal(); }

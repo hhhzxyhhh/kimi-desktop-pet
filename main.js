@@ -1,6 +1,6 @@
 // Kimi 桌宠 · 主进程
 // 透明无边框小窗，置顶悬浮；宠物"走路"= 窗口本身在屏幕上平移
-const { app, BrowserWindow, Menu, Tray, nativeImage, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, Menu, Tray, nativeImage, ipcMain, screen, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -133,25 +133,40 @@ function openKimiTerminal() {
   }
 }
 
-// 没装 Ghostty：有 Homebrew 就自动装（装完自动开）；没 brew 退回 Terminal.app
+// 没装 Ghostty：有 Homebrew 就自动装（装完自动开）；没 brew 就开可见终端引导装（需输一次密码）
 function installGhosttyThenOpen() {
   const brew = ['/opt/homebrew/bin/brew', '/usr/local/bin/brew'].find(p => fs.existsSync(p));
   if (!brew) {
-    toast('没装 Ghostty 也没有 Homebrew，先用 Terminal 顶一下');
-    spawn('osascript', ['-e', 'tell application "Terminal"', '-e', 'activate',
-      '-e', 'do script "kimi"', '-e', 'end tell'], { detached: true, stdio: 'ignore' }).unref();
+    // Homebrew 安装必须用户输密码，没法后台静默装：开个可见终端跑完整脚本，输完密码全自动
+    toast('要输密码哦', '弹出的终端里输入登录密码（输入时看不见字符是正常的），Homebrew 和 Ghostty 会自动装好，装完自动打开 Kimi Code 终端。', true);
+    const scriptPath = path.join(os.tmpdir(), 'kimi-pet-install-ghostty.sh');
+    fs.writeFileSync(scriptPath, [
+      '#!/bin/bash',
+      'set -e',
+      '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
+      'eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || eval "$(/usr/local/bin/brew shellenv)"',
+      'brew install --cask ghostty',
+      `/Applications/Ghostty.app/Contents/MacOS/ghostty -e "$SHELL" -lc kimi &`,
+      'exit 0'
+    ].join('\n'), { mode: 0o755 });
+    spawn('open', ['-a', 'Terminal.app', scriptPath], { detached: true, stdio: 'ignore' }).unref();
     return;
   }
-  toast('在给你装 Ghostty，装完自动开终端…');
+  toast('装 Ghostty 中…', '正在通过 Homebrew 安装 Ghostty，装完会自动打开 Kimi Code 终端。');
   const inst = spawn(brew, ['install', '--cask', 'ghostty'], { detached: true, stdio: 'ignore' });
   inst.on('close', (code) => {
     if (code === 0 && fs.existsSync(GHOSTTY_APP)) openKimiTerminal();
-    else toast('Ghostty 装失败了，去 ghostty.org 手动装一下吧');
+    else toast('装失败了', 'Ghostty 自动安装失败，可以去 ghostty.org 手动下载安装。');
   });
 }
 
-// 气泡通报（装终端进度等）
-function toast(text) { if (win) win.webContents.send('pet-toast', text); }
+// 气泡通报（短提示；sticky 时常驻等用户点掉）+ 需要行动/有详情时补一条系统通知
+function toast(text, notify, sticky) {
+  if (win) win.webContents.send('pet-toast', { text, sticky: !!sticky });
+  if (notify && Notification.isSupported()) {
+    new Notification({ title: 'Kimi 桌宠', body: notify }).show();
+  }
+}
 
 function createWindow() {
   const wa = screen.getPrimaryDisplay().workArea;
