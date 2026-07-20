@@ -84,22 +84,12 @@ function setScale(s, fx = 0.5, fy = 0.5) {
   saveSettings();
 }
 
-// 菜单（右键和托盘共用；每次重建让"大小"选中态跟随当前 scale）
+// 菜单（右键和托盘共用）
 function buildMenu() {
-  const sizeItems = [
-    { label: '迷你 (120px)', s: 0.5 },
-    { label: '小只 (180px)', s: 0.75 },
-    { label: '标准 (240px)', s: 1 },
-    { label: '大只 (360px)', s: 1.5 },
-    { label: '巨大 (480px)', s: 2 }
-  ].map(({ label, s }) => ({
-    label, type: 'radio', checked: s === scale, click: () => setScale(s)
-  }));
   return Menu.buildFromTemplate([
     { label: '打开 Kimi Code 终端', click: openKimiTerminal },
     // 通知样式（横幅/提醒）只能用户在系统设置改：帮他直接打开设置页（macOS 专属，Windows 没有这个概念）
     ...(process.platform === 'darwin' ? [{ label: '通知样式设置', click: () => spawn('open', ['x-apple.systempreferences:com.apple.preference.notifications'], { detached: true, stdio: 'ignore' }).unref() }] : []),
-    { label: '大小', submenu: sizeItems },
     {
       label: '模式', submenu: [
         { label: 'stay', type: 'radio', checked: mode === 'stay', click: () => setMode('stay') },
