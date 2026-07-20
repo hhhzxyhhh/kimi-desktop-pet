@@ -96,8 +96,6 @@ function buildMenu() {
     label, type: 'radio', checked: s === scale, click: () => setScale(s)
   }));
   return Menu.buildFromTemplate([
-    { label: '睡觉 / 叫醒', click: () => win && win.webContents.send('toggle-sleep') },
-    { label: '说句话', click: () => win && win.webContents.send('talk') },
     { label: '打开 Kimi Code 终端', click: openKimiTerminal },
     // 通知样式（横幅/提醒）只能用户在系统设置改：帮他直接打开设置页（macOS 专属，Windows 没有这个概念）
     ...(process.platform === 'darwin' ? [{ label: '通知样式设置', click: () => spawn('open', ['x-apple.systempreferences:com.apple.preference.notifications'], { detached: true, stdio: 'ignore' }).unref() }] : []),
@@ -321,7 +319,7 @@ function createWindow() {
   // 分量可能不足 1px（小体型拆细步），小数部分按轴累积进下一步，避免取整偏差
   let stepFracX = 0, stepFracY = 0;
   ipcMain.on('pet-step', (event, { dx, dy }) => {
-    if (!win) return;
+    if (!win || !Number.isFinite(dx) || !Number.isFinite(dy)) return;
     const [x, y] = win.getPosition();
     const size = win.getSize()[0];
     const area = screen.getPrimaryDisplay().workArea;
@@ -347,7 +345,8 @@ function createWindow() {
   // 拖拽：dx/dy 是鼠标在屏幕坐标系的绝对位移，直接叠加到按下时的窗口位置。
   // 不能用 clientX：它相对窗口，窗口一动就产生反馈（实测只跟得上一半）
   ipcMain.on('pet-drag', (event, { dx, dy }) => {
-    if (!win || !dragOrigin) return;
+    // 防御 NaN/undefined：非鼠标指针事件可能不带屏幕坐标，setPosition 收到 NaN 会直接抛异常
+    if (!win || !dragOrigin || !Number.isFinite(dx) || !Number.isFinite(dy)) return;
     win.setPosition(Math.round(dragOrigin.x + dx), Math.round(dragOrigin.y + dy));
   });
 
