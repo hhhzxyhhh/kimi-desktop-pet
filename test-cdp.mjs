@@ -4,10 +4,12 @@
 // 用法: node test-cdp.mjs   （需要 electron 以 --remote-debugging-port=9223 运行）
 import { writeFileSync, mkdirSync, rmSync } from 'fs';
 import { join } from 'path';
+import { tmpdir } from 'os';
 
 const PORT = 9223;
 // 测试专用联动状态目录（实例用 KIMI_PET_STATE_DIR 指向它）；开局先清掉，防上次残留污染
-const agentDir = '/tmp/pet-test-agent-state';
+// 默认用系统临时目录（Windows 没有 /tmp）；也可用 KIMI_PET_STATE_DIR 显式指定保持一致
+const agentDir = process.env.KIMI_PET_STATE_DIR || join(tmpdir(), 'pet-test-agent-state');
 rmSync(agentDir, { recursive: true, force: true });
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 let failures = 0;

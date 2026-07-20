@@ -83,9 +83,10 @@ npm start
 ## 自动化测试（开发用）
 
 ```bash
-npm test                                                   # 纯 Node 单测（hook 安装 + 多会话聚合，跨平台）
-KIMI_PET_ALLOW_MULTI=1 KIMI_PET_STATE_DIR=/tmp/pet-test-agent-state node_modules/.bin/electron . --remote-debugging-port=9223   # 先带调试端口启动（隔离联动状态，放行多实例）
-node test-cdp.mjs                                            # 再跑 CDP 行为回归
+npm test                                                   # 纯 Node 单测（hook 安装 + 多会话聚合 + pet-hook 事件桥）
+export KIMI_PET_ALLOW_MULTI=1 KIMI_PET_STATE_DIR=/tmp/pet-test-agent-state   # Windows 用 set，路径换 %TEMP%
+node_modules/.bin/electron . --remote-debugging-port=9223 &                  # 带调试端口启动（隔离联动状态）
+node test-cdp.mjs                                                            # 再跑 CDP 行为回归
 ```
 
 ## 打包成应用（可选）
