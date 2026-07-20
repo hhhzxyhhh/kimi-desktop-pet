@@ -311,6 +311,7 @@ function decide() {
 function startWalk() {
   clearTimers();
   state = 'walk';
+  orb.classList.remove('sleeping'); // 走路与睡颜互斥：即使被绕过正常流程直接调用，也不许一边睡一边蹦
   squash.classList.remove('breathe');
   squash.classList.add('hop');
   // 满屏乱跑：全屏随机选个目的地，直线蹦过去；到达或超时收工

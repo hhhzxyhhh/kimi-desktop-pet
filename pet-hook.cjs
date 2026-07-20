@@ -1,17 +1,17 @@
 // Kimi Code hook → Kimi 桌宠状态桥
-// 从 stdin 读 hook 事件 JSON，把 agent 状态写入桌宠的状态文件（桌宠主进程每 500ms 轮询）
+// 从 stdin 读 hook 事件 JSON，按会话写状态文件（每会话一个，桌宠主进程每 500ms 轮询整个目录做聚合）
 // 安装位置：~/.kimi-code/hooks/pet-hook.cjs（由 config.toml 的 [[hooks]] 调用）
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-// 与 Electron userData 对齐的状态文件路径（跨平台）
+// 与 Electron userData 对齐的状态目录路径（跨平台）
 const appData = process.platform === 'darwin'
   ? path.join(os.homedir(), 'Library', 'Application Support')
   : process.platform === 'win32'
     ? path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'))
     : path.join(os.homedir(), '.config');
-const STATE_FILE = path.join(appData, 'kimi-desktop-pet', 'agent-state.json');
+const STATE_DIR = path.join(appData, 'kimi-desktop-pet', 'agent-state');
 
 let input = '';
 process.stdin.on('data', c => { input += c; });
@@ -38,9 +38,14 @@ process.stdin.on('end', () => {
   // SessionStart 也复位（参考 Clawd On Desk）：新会话不继承上一个死会话的残留状态
 
   if (!state) return; // 不关心的事件（PostToolUseFailure 等）直接忽略
+  // 每个会话一个文件：多窗口同时开时互不覆盖，主进程聚合；文件名只留安全字符
+  const sessionId = String(p.session_id || 'unknown').replace(/[^\w-]/g, '_');
+  const file = path.join(STATE_DIR, sessionId + '.json');
   try {
-    fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true });
+    // 会话结束：直接删掉它的状态文件，不残留占位
+    if (ev === 'SessionEnd') { fs.rmSync(file, { force: true }); return; }
+    fs.mkdirSync(STATE_DIR, { recursive: true });
     // ev 带给主进程：PostToolUse 的 working 超时无动作才降级为 thinking
-    fs.writeFileSync(STATE_FILE, JSON.stringify({ state, tool, ev, ts: Date.now() }));
+    fs.writeFileSync(file, JSON.stringify({ state, tool, ev, ts: Date.now() }));
   } catch {}
 });

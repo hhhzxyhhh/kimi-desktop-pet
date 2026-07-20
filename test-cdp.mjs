@@ -2,12 +2,13 @@
 // 断言一律用主进程权威状态（petAPI.debugState），不信渲染层 outerWidth/screenX
 // 测试期间开启鼠标穿透，屏蔽用户真实鼠标的干扰；结束（含异常）恢复
 // 用法: node test-cdp.mjs   （需要 electron 以 --remote-debugging-port=9223 运行）
-import { writeFileSync, rmSync } from 'fs';
+import { writeFileSync, mkdirSync, rmSync } from 'fs';
+import { join } from 'path';
 
 const PORT = 9223;
-// 测试专用联动状态文件（实例用 KIMI_PET_STATE_FILE 指向它）；开局先清掉，防上次残留污染
-const agentFile = '/tmp/pet-test-agent-state.json';
-rmSync(agentFile, { force: true });
+// 测试专用联动状态目录（实例用 KIMI_PET_STATE_DIR 指向它）；开局先清掉，防上次残留污染
+const agentDir = '/tmp/pet-test-agent-state';
+rmSync(agentDir, { recursive: true, force: true });
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 let failures = 0;
 function check(name, actual, expected, tol = 3) {
@@ -209,8 +210,11 @@ try {
   checkTrue('T12 被戳醒生气', t12c === 'angry', `expr=${t12c}`);
 
   // --- T13: Kimi Code 联动：状态文件 → 表情 + TTL 恢复 ---
-  // 测试实例通过 KIMI_PET_STATE_FILE 指到这个独立路径，与真实 hook 的状态文件隔离
-  const writeAgent = (state, ageMs = 0, ev) => writeFileSync(agentFile, JSON.stringify({ state, ev, ts: Date.now() - ageMs }));
+  // 测试实例通过 KIMI_PET_STATE_DIR 指到这个独立目录，与真实 hook 的状态目录隔离
+  const writeAgent = (state, ageMs = 0, ev, session = 'test-session') => {
+    mkdirSync(agentDir, { recursive: true });
+    writeFileSync(join(agentDir, session + '.json'), JSON.stringify({ state, ev, ts: Date.now() - ageMs }));
+  };
   await evl(`clearTimers(); state = 'idle';`);
   writeAgent('searching');
   await sleep(800);
@@ -287,7 +291,21 @@ try {
   await sleep(4000); // done TTL 3.5s
   const t13e = await evl(`document.getElementById('orb').dataset.expr`);
   checkTrue('T13 完成后自动恢复', t13e === 'default', `expr=${t13e}`);
-  rmSync(agentFile, { force: true });
+  // --- T18: 多会话聚合：权限最优先，一个会话结束不影响另一个 ---
+  writeAgent('working', 0, 'PreToolUse', 'session-a');
+  writeAgent('permission', 0, undefined, 'session-b');
+  await sleep(900);
+  const t18a = await evl(`document.getElementById('orb').dataset.expr`);
+  checkTrue('T18 B 请求权限压过 A 在忙', t18a === 'notice', `expr=${t18a}`);
+  rmSync(join(agentDir, 'session-b.json'), { force: true }); // B 会话结束（SessionEnd 会删状态文件）
+  await sleep(900);
+  const t18b = await evl(`document.getElementById('orb').dataset.expr`);
+  checkTrue('T18 B 结束后回落到 A 的工作脸', t18b === 'focus', `expr=${t18b}`);
+  writeAgent('idle', 0, undefined, 'session-a'); // A 也闲了
+  await sleep(900);
+  const t18c = await evl(`document.getElementById('orb').dataset.expr`);
+  checkTrue('T18 全部空闲恢复默认', t18c === 'default', `expr=${t18c}`);
+  rmSync(agentDir, { recursive: true, force: true });
 
   // --- T4: 大尺寸气泡：完整 + 贴在头顶上方 ---
   await evl(`clearTimers(); state = 'idle';`);
@@ -367,6 +385,17 @@ try {
   const moved = Math.hypot(w1.x - w0.x, w1.y - w0.y);
   checkTrue('T14 乱跑明显位移', moved > 10, `位移=${moved.toFixed(1)}`);
   checkTrue('T14 朝左上目标移动', w1.x < w0.x && w1.y <= w0.y, `dx=${(w1.x - w0.x).toFixed(1)} dy=${(w1.y - w0.y).toFixed(1)}`);
+
+  // --- T19: 睡觉中被强制拉去走路，睡颜类必须摘掉（不许一边睡一边蹦） ---
+  await evl(`clearTimers(); startSleep();`);
+  await sleep(100);
+  const t19a = await evl(`document.getElementById('orb').classList.contains('sleeping')`);
+  checkTrue('T19 入睡后睡颜在', t19a === true);
+  await evl(`startWalk();`);
+  await sleep(100);
+  const t19b = await evl(`document.getElementById('orb').classList.contains('sleeping')`);
+  checkTrue('T19 强制走路后睡颜已摘', t19b === false);
+  await evl(`clearTimers(); state = 'idle'; squash.classList.remove('hop');`);
 } finally {
   await evl(`petAPI.debugIgnoreMouse(false)`).catch(() => {});
 }

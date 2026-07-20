@@ -4,6 +4,11 @@ const { app, BrowserWindow, Menu, Tray, nativeImage, ipcMain, screen } = require
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const { aggregate, STALE_TTL } = require('./agent-state.cjs');
+
+// 单实例锁：桌宠不需要双胞胎，重复启动直接退出（误双击/重复 npm start 都不会下崽）
+// KIMI_PET_ALLOW_MULTI=1 放行：测试场景需要与常驻实例并存的隔离实例时用
+if (process.env.KIMI_PET_ALLOW_MULTI !== '1' && !app.requestSingleInstanceLock()) app.quit();
 
 const SIZE = 240; // 基准边长（正方形，宠物住在底部，上方留白给气泡和 zzz）
 const MIN_SCALE = 0.4, MAX_SCALE = 2.5; // 滚轮缩放的上下限（96px ~ 600px）
@@ -139,6 +144,9 @@ function createWindow() {
 
   win.loadFile('index.html');
 
+  // 窗口销毁后立即置空：退出流程中两个轮询定时器还在跑，不置空会向已销毁窗口发消息抛异常
+  win.on('closed', () => { win = null; });
+
   // Electron 会按 origin 记住上次的页面 zoom，启动时强制同步回当前 scale，
   // 否则窗口尺寸(240)和 zoom(上次残留)脱节，拖拽/锚点换算全乱
   win.webContents.on('did-finish-load', () => {
@@ -160,34 +168,38 @@ function createWindow() {
     });
   }, 120);
 
-  // Kimi Code 联动：轮询 hook 写入的 agent 状态文件，变化时转发渲染层（带 TTL 兜底）
-  // KIMI_PET_STATE_FILE 可覆盖路径：测试时用独立路径，避免被真实 hook 状态污染
-  const agentStateFile = process.env.KIMI_PET_STATE_FILE || path.join(app.getPath('userData'), 'agent-state.json');
-  let lastAgent = 'idle', lastTs = 0;
+  // Kimi Code 联动：每个会话一个状态文件，轮询整个目录聚合成全局状态转发渲染层
+  // KIMI_PET_STATE_DIR 可覆盖路径：测试时用独立目录，避免被真实 hook 状态污染
+  const agentStateDir = process.env.KIMI_PET_STATE_DIR || path.join(app.getPath('userData'), 'agent-state');
+  // 旧版本的全局单状态文件已弃用，顺手清掉
+  try { fs.rmSync(path.join(app.getPath('userData'), 'agent-state.json'), { force: true }); } catch {}
+  let lastAgent = 'idle';
+  const lastEventTs = new Map(); // 会话 id → 上次见到的事件 ts（同状态新事件也要重新通报）
   setInterval(() => {
     if (!win) return;
-    let s = null;
-    try { s = JSON.parse(fs.readFileSync(agentStateFile, 'utf8')); } catch {}
-    // 状态一直保持到下一个信号；只有 done/error 是瞬时庆祝，闪一下就恢复
-    const FLASH_TTL = { done: 3500, error: 5000 };
-    let state = 'idle';
-    let outTs = s ? s.ts : 0;
-    if (s && Number.isFinite(s.ts)) {
-      const flash = FLASH_TTL[s.state];
-      if (!flash || Date.now() - s.ts < flash) state = s.state;
-      else outTs = Date.now(); // 过期推导的 idle：视为当下事件，别被渲染层防乱序拦掉
-      // 工具完成后的 working：连续 15s 没有任何动作 = 真在沉思，降级为 thinking
-      if (state === 'working' && s.ev === 'PostToolUse' && Date.now() - s.ts > 15000) {
-        state = 'thinking';
-        outTs = Date.now(); // 降级同样是当下推导
+    const now = Date.now();
+    const sessions = [];
+    let isNewEvent = false;
+    let files = [];
+    try { files = fs.readdirSync(agentStateDir); } catch {} // 目录不存在 = 没有任何会话活动
+    for (const f of files) {
+      if (!f.endsWith('.json')) continue;
+      const id = f.slice(0, -5);
+      let s = null;
+      try { s = JSON.parse(fs.readFileSync(path.join(agentStateDir, f), 'utf8')); } catch {}
+      if (!s || !Number.isFinite(s.ts)) continue;
+      if (now - s.ts > STALE_TTL) { // 死会话残留（进程被强杀，没发 SessionEnd），清掉
+        try { fs.rmSync(path.join(agentStateDir, f), { force: true }); } catch {}
+        lastEventTs.delete(id);
+        continue;
       }
+      if (lastEventTs.get(id) !== s.ts) { lastEventTs.set(id, s.ts); isNewEvent = true; }
+      sessions.push(s);
     }
-    // 同状态重复写入也是"新事件"（再次提问/连续调工具），要重新通报，否则叫醒不可靠
-    const isNewEvent = !!(s && Number.isFinite(s.ts) && s.ts !== lastTs);
-    if (isNewEvent) lastTs = s.ts;
+    const { state, ts } = aggregate(sessions, now);
     if (state !== lastAgent || isNewEvent) {
       lastAgent = state;
-      win.webContents.send('agent-state', { state, ts: outTs });
+      win.webContents.send('agent-state', { state, ts });
     }
   }, 500);
 
@@ -257,7 +269,7 @@ function createWindow() {
     if (win) win.setIgnoreMouseEvents(!!flag);
   });
   // 调试用：重置 agent 状态跟踪（长测试套件里让用例互不污染）
-  ipcMain.handle('pet-debug-reset-agent', () => { lastAgent = 'idle'; lastTs = 0; });
+  ipcMain.handle('pet-debug-reset-agent', () => { lastAgent = 'idle'; lastEventTs.clear(); });
 }
 
 app.whenReady().then(() => {
