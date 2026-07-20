@@ -31,4 +31,13 @@ function aggregate(sessions, now) {
   return best ? { state: best.state, ts: best.ts } : { state: 'idle', ts: now };
 }
 
-module.exports = { effectiveState, aggregate, FLASH_TTL, STALE_TTL, IDLE_TTL, TIER };
+// 超强提醒判定：有没有超时未处理的 permission/ask 会话（等你批准/问你问题没人理）
+function needsReminder(sessions, now, timeoutMs) {
+  return sessions.some(s => {
+    if (!s || !Number.isFinite(s.ts)) return false;
+    const e = effectiveState(s, now);
+    return !e.stale && ['permission', 'ask'].includes(e.state) && now - s.ts > timeoutMs;
+  });
+}
+
+module.exports = { effectiveState, aggregate, needsReminder, FLASH_TTL, STALE_TTL, IDLE_TTL, TIER };

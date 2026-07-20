@@ -138,7 +138,7 @@ if (!window.petAPI) {
     step: () => {}, onStepDone: () => {}, dragStart: () => {}, dragTo: () => {}, resize: () => {},
     openTerminal: () => {},
     onScale: () => {}, onCursor: () => {}, onMode: () => {}, onAgentState: () => {},
-    onToggleSleep: () => {}, onTalk: () => {}, onToast: () => {}
+    onToggleSleep: () => {}, onTalk: () => {}, onToast: () => {}, onSuperRemind: () => {}
   };
 }
 
@@ -365,7 +365,7 @@ function toIdle() {
 }
 
 function decide() {
-  if (state !== 'idle') return;
+  if (state !== 'idle' || reminding) return; // 提醒期间不散步不摸鱼
   if (agentState) { stateTimer = setTimeout(decide, 3000); return; } // 开工期间坚守岗位，不散步不摸鱼
   const r = Math.random();
   if (mode === 'kolo' && r < .55) startWalk();          // stay 模式不散步
@@ -426,6 +426,23 @@ function wake(angry) {
     setTimeout(() => { if (orb.dataset.expr === 'happy') refreshFace(); }, 1600);
   }
 }
+
+/* ---------- 超强提醒：permission/ask 超时没人理，闪现到光标旁上蹿下跳 ---------- */
+let reminding = false;
+petAPI.onSuperRemind(on => {
+  reminding = on;
+  if (on) {
+    if (state === 'sleep') wake(false);
+    orb.classList.remove('sleeping');
+    squash.classList.remove('breathe');
+    squash.classList.add('hop'); // 上蹿下跳
+    say('理理我！', 1600);
+  } else {
+    squash.classList.remove('hop');
+    squash.classList.add('breathe');
+    refreshFace();
+  }
+});
 
 /* ---------- 戳 & 拖拽 ---------- */
 const pokeTexts = ['啵！', '呜', '别戳啦', '？', '再戳要漏气了', '嗷呜'];

@@ -11,7 +11,7 @@
 
 ```bash
 npm test   # 纯 Node 单测（hook 安装 + 多会话聚合 + pet-hook 事件桥），跨平台
-export KIMI_PET_ALLOW_MULTI=1 KIMI_PET_STATE_DIR=/tmp/pet-test-agent-state   # Windows 用 set，路径换 %TEMP%
+export KIMI_PET_ALLOW_MULTI=1 KIMI_PET_STATE_DIR=/tmp/pet-test-agent-state KIMI_PET_REMIND_MIN=1   # Windows 用 set，路径换 %TEMP%
 node_modules/.bin/electron . --remote-debugging-port=9223 &
 node test-cdp.mjs   # CDP 行为回归（需要上一条的实例在跑）
 ```

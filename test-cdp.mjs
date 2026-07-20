@@ -438,6 +438,21 @@ try {
   const t21 = await evl(`window.__ot`);
   checkTrue('T21 双击触发打开终端', t21 === 1, `调用次数=${t21}`);
   await evl(`openKimiTerm = window.__rawOT;`);
+
+  // --- T22: 超强提醒：超时 permission → 闪现到光标旁 + hop；处理后恢复（实例需带 KIMI_PET_REMIND_MIN=1） ---
+  await evl(`clearTimers(); state = 'idle';`);
+  writeAgent('permission', 70000, undefined, 'session-x'); // 70s 前的权限申请（提醒超时 1min）
+  await sleep(1500);
+  const t22a = await evl(`petAPI.debugState().then(s => ({
+    d: Math.hypot(s.bounds.x + s.bounds.width / 2 - s.cursor.x, s.bounds.y + s.bounds.height / 2 - s.cursor.y),
+    hop: document.getElementById('squash').classList.contains('hop')
+  }))`);
+  checkTrue('T22 超时后闪现到光标附近', t22a.d < 250, `距离=${t22a.d.toFixed(0)}px`);
+  checkTrue('T22 提醒期间上蹿下跳', t22a.hop === true);
+  rmSync(join(agentDir, 'session-x.json'), { force: true }); // 用户处理了
+  await sleep(900);
+  const t22b = await evl(`document.getElementById('squash').classList.contains('hop')`);
+  checkTrue('T22 处理后停止蹦跶', t22b === false);
 } finally {
   await evl(`petAPI.debugIgnoreMouse(false)`).catch(() => {});
 }

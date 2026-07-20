@@ -1,6 +1,6 @@
 // agent-state.cjs 单元测试：多会话状态聚合（纯 Node，任何平台可跑）
 // 用法: node test-agent-state.cjs
-const { effectiveState, aggregate, STALE_TTL, IDLE_TTL } = require('./agent-state.cjs');
+const { effectiveState, aggregate, needsReminder, STALE_TTL, IDLE_TTL } = require('./agent-state.cjs');
 
 let failures = 0;
 function check(name, actual, expected, detail = '') {
@@ -42,6 +42,15 @@ check('done 过期后只剩另一个会话在忙', aggregate([S('done', 10000), 
 check('死会话不计入：只剩死会话 → idle', aggregate([S('working', STALE_TTL + 5000, 'PreToolUse')], NOW).state, 'idle');
 check('死会话不抢活会话的镜', aggregate([S('permission', STALE_TTL + 5000), S('working', 1000, 'PreToolUse')], NOW).state, 'working');
 check('B 被 interrupt 回 idle 后 A 仍在忙', aggregate([S('working', 3000, 'PreToolUse'), S('idle', 500)], NOW).state, 'working');
+
+/* ---------- needsReminder：超强提醒判定 ---------- */
+check('permission 超时要提醒', needsReminder([S('permission', 70000)], NOW, 60000), true);
+check('permission 未超时不提醒', needsReminder([S('permission', 30000)], NOW, 60000), false);
+check('ask 超时也提醒', needsReminder([S('ask', 400000)], NOW, 300000), true);
+check('working 再久也不提醒', needsReminder([S('working', 400000, 'PreToolUse')], NOW, 60000), false);
+check('idle 不提醒', needsReminder([S('idle', 400000)], NOW, 60000), false);
+check('死会话不提醒', needsReminder([S('permission', STALE_TTL + 1000)], NOW, 60000), false);
+check('无会话不提醒', needsReminder([], NOW, 60000), false);
 
 console.log(failures === 0 ? '\n全部通过 ✅' : `\n${failures} 项失败 ❌`);
 process.exit(failures === 0 ? 0 : 1);

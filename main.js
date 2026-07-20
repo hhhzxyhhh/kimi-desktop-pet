@@ -4,7 +4,7 @@ const { app, BrowserWindow, Menu, Tray, nativeImage, ipcMain, screen, Notificati
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { aggregate, effectiveState, STALE_TTL } = require('./agent-state.cjs');
+const { aggregate, effectiveState, needsReminder, STALE_TTL } = require('./agent-state.cjs');
 const { spawn } = require('child_process');
 
 // 单实例锁：桌宠不需要双胞胎，重复启动直接退出（误双击/重复 npm start 都不会下崽）
@@ -18,6 +18,7 @@ let tray = null;
 let scale = 1;     // 当前缩放倍数，实际窗口边长 = SIZE * scale
 let mode = 'kolo'; // 行为模式：stay 乖乖待着 / kolo 到处乱跑（kimi only live once）
 let dblAction = 'terminal'; // 双击动作：terminal 开 Kimi Code 终端 / website 开官网
+let remindMin = 0; // 超强提醒（分钟）：permission/ask 超时没人理就闪现到光标旁蹦跶；0=关
 let lastSessions = []; // 最近一次聚合出的活跃会话清单（菜单"会话状态"用）
 // 会话状态的中文名（菜单明细用）
 const SESSION_LABEL = { working: '在忙', searching: '搜索中', thinking: '思考中', permission: '等你批准', ask: '问你问题', done: '刚搞定', error: '出错了', idle: '空闲' };
@@ -34,7 +35,7 @@ function saveSettings() {
     if (!win) return;
     const [x, y] = win.getPosition();
     // 合并保留其他键（如 agentLinkInstalled），不整个覆盖
-    fs.writeFile(settingsFile(), JSON.stringify({ ...loadSettings(), scale, x, y, mode, dblclick: dblAction }), () => {});
+    fs.writeFile(settingsFile(), JSON.stringify({ ...loadSettings(), scale, x, y, mode, dblclick: dblAction, remindMin }), () => {});
   }, 400);
 }
 
@@ -60,6 +61,12 @@ function setMode(m) {
 // 切换双击动作（terminal 开终端 / website 开官网）
 function setDblAction(a) {
   dblAction = a;
+  saveSettings();
+}
+
+// 切换超强提醒超时（分钟，0=关）
+function setRemindMin(m) {
+  remindMin = m;
   saveSettings();
 }
 
@@ -99,6 +106,15 @@ function buildMenu() {
       label: '双击', submenu: [
         { label: '打开 Kimi Code 终端', type: 'radio', checked: dblAction === 'terminal', click: () => setDblAction('terminal') },
         { label: '打开官网', type: 'radio', checked: dblAction === 'website', click: () => setDblAction('website') }
+      ]
+    },
+    // 超强提醒：permission/ask 超时没人理，闪现到光标旁上蹿下跳
+    {
+      label: '超强提醒', submenu: [
+        { label: '关', type: 'radio', checked: remindMin === 0, click: () => setRemindMin(0) },
+        { label: '1 分钟', type: 'radio', checked: remindMin === 1, click: () => setRemindMin(1) },
+        { label: '5 分钟', type: 'radio', checked: remindMin === 5, click: () => setRemindMin(5) },
+        { label: '10 分钟', type: 'radio', checked: remindMin === 10, click: () => setRemindMin(10) }
       ]
     },
     // 会话状态明细：每个活跃 Kimi Code 会话一行（项目名 + 状态），纯展示
@@ -181,6 +197,8 @@ function createWindow() {
   scale = Math.min(Math.max(st.scale || 1, MIN_SCALE), MAX_SCALE);
   mode = st.mode === 'stay' ? 'stay' : 'kolo';
   dblAction = st.dblclick === 'website' ? 'website' : 'terminal';
+  // 超强提醒超时：菜单只给 1/5/10，环境变量可给任意分钟数（测试用）
+  remindMin = [1, 5, 10].includes(st.remindMin) ? st.remindMin : (Number(process.env.KIMI_PET_REMIND_MIN) || 0);
   const size0 = Math.round(SIZE * scale);
   const onScreen = (x, y) => screen.getAllDisplays().some(d => {
     const a = d.workArea;
@@ -250,6 +268,7 @@ function createWindow() {
   try { fs.rmSync(path.join(app.getPath('userData'), 'agent-state.json'), { force: true }); } catch {}
   let lastAgent = 'idle', lastSesSig = '[]';
   const lastEventTs = new Map(); // 会话 id → 上次见到的事件 ts（同状态新事件也要重新通报）
+  let reminding = false, lastRemindMove = 0; // 超强提醒状态与上次闪现时间
   setInterval(() => {
     if (!win) return;
     const now = Date.now();
@@ -277,6 +296,22 @@ function createWindow() {
       .map(s => ({ id: s.id, proj: s.proj || '', state: effectiveState(s, now).state }));
     const sesSig = JSON.stringify(sesList);
     lastSessions = sesList;
+    // 超强提醒：有超时没人理的 permission/ask，就隔 ~1.2s 闪现到光标旁边
+    const remind = remindMin > 0 && needsReminder(sessions, now, remindMin * 60000);
+    if (remind !== reminding) {
+      reminding = remind;
+      win.webContents.send('super-remind', remind);
+    }
+    if (reminding && now - lastRemindMove > 1200) {
+      lastRemindMove = now;
+      const p = screen.getCursorScreenPoint();
+      const size = win.getSize()[0];
+      const a = screen.getPrimaryDisplay().workArea;
+      // 光标附近随机落脚（别正压光标），钳回屏幕内
+      const nx = Math.max(a.x, Math.min(p.x + (Math.random() - 0.5) * 160 - size / 2, a.x + a.width - size));
+      const ny = Math.max(a.y, Math.min(p.y + (Math.random() - 0.5) * 120 - 40 - size / 2, a.y + a.height - size));
+      win.setPosition(Math.round(nx), Math.round(ny));
+    }
     // 清单变化（会话完成/过期退场）即使没有新事件也要通报，否则徽标和菜单会过期
     if (state !== lastAgent || isNewEvent || sesSig !== lastSesSig) {
       lastAgent = state;
@@ -351,6 +386,7 @@ function createWindow() {
     bounds: win ? win.getBounds() : null,
     zoom: win ? win.webContents.getZoomFactor() : null,
     area: screen.getPrimaryDisplay().workArea,
+    cursor: screen.getCursorScreenPoint(),
     trayBounds: tray ? tray.getBounds() : null
   }));
   // 调试用：测试时屏蔽用户鼠标干扰（窗口变点击穿透）
@@ -391,5 +427,5 @@ app.on('before-quit', () => {
   clearTimeout(saveTimer);
   if (!win) return;
   const [x, y] = win.getPosition();
-  try { fs.writeFileSync(settingsFile(), JSON.stringify({ ...loadSettings(), scale, x, y, mode, dblclick: dblAction })); } catch {}
+  try { fs.writeFileSync(settingsFile(), JSON.stringify({ ...loadSettings(), scale, x, y, mode, dblclick: dblAction, remindMin })); } catch {}
 });

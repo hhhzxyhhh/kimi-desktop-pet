@@ -20,7 +20,8 @@
 - **两种模式**：`stay` 乖乖待着（原地生活，不散步）/ `kolo` 到处乱跑（kimi only live once，台球式全屏游走，撞四边按轴反弹）
 - **联动 Kimi Code**：你给它派活时它会同步"上班"（见下）
 - **托盘图标**：macOS 菜单栏 / Windows 系统托盘，和右键同一套菜单
-- **右键菜单**：模式 / 双击 / 会话状态 / 退出
+- **超强提醒**：Kimi Code 等你批准 / 向你提问超过设定时间没人理，它就闪现到鼠标旁边上蹿下跳（右键菜单"超强提醒"设 1/5/10 分钟，默认关）
+- **右键菜单**：模式 / 双击 / 超强提醒 / 会话状态 / 退出
 - 睡觉时戳它会被骂
 
 ## 下载与使用
@@ -54,7 +55,7 @@ npm start
 | 按住拖动 | 拎起来，果冻拉伸，松手回弹 |
 | 双击 | 打开 Ghostty 终端跑 Kimi Code（没装会先说一声再自动装；没有 Homebrew 会引导你先装它） |
 | 滚轮 | 调节大小（96–600px） |
-| 右键 | 菜单：打开终端、模式、双击、会话状态、退出 |
+| 右键 | 菜单：打开终端、模式、双击、超强提醒、会话状态、退出 |
 | 菜单栏/托盘图标 | 同一套菜单（找不到右键入口时用） |
 | 睡觉时戳 | 被凶 |
 
@@ -84,7 +85,7 @@ npm start
 
 ```bash
 npm test                                                   # 纯 Node 单测（hook 安装 + 多会话聚合 + pet-hook 事件桥）
-export KIMI_PET_ALLOW_MULTI=1 KIMI_PET_STATE_DIR=/tmp/pet-test-agent-state   # Windows 用 set，路径换 %TEMP%
+export KIMI_PET_ALLOW_MULTI=1 KIMI_PET_STATE_DIR=/tmp/pet-test-agent-state KIMI_PET_REMIND_MIN=1   # Windows 用 set，路径换 %TEMP%
 node_modules/.bin/electron . --remote-debugging-port=9223 &                  # 带调试端口启动（隔离联动状态）
 node test-cdp.mjs                                                            # 再跑 CDP 行为回归
 ```
