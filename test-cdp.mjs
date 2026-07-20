@@ -341,7 +341,7 @@ try {
 
   // --- T4: 大尺寸气泡：完整 + 贴在头顶上方 ---
   await evl(`clearTimers(); state = 'idle';`);
-  await evl(`document.getElementById('orb').dispatchEvent(new MouseEvent('dblclick', {bubbles: true}))`);
+  await evl(`talk()`); // dblclick 现在是开终端，说话直接调 talk()
   await sleep(500);
   const shot1 = await cmd('Page.captureScreenshot', { format: 'png' });
   writeFileSync('shot-big.png', Buffer.from(shot1.data, 'base64'));
@@ -361,7 +361,7 @@ try {
   check('T5 最小窗口宽', g2.w, Math.round(240 * 0.4), 2);
   check('T5 zoom=scale', g2.zoom, g2.scale, 0.01);
   await evl(`clearTimers(); state = 'idle';`);
-  await evl(`document.getElementById('orb').dispatchEvent(new MouseEvent('dblclick', {bubbles: true}))`);
+  await evl(`talk()`); // dblclick 现在是开终端，说话直接调 talk()
   await sleep(500);
   const shot2 = await cmd('Page.captureScreenshot', { format: 'png' });
   writeFileSync('shot-small.png', Buffer.from(shot2.data, 'base64'));
@@ -389,7 +389,7 @@ try {
   console.log('T7 回标准后状态:', JSON.stringify(g3));
   check('T7 回到 scale 1', g3.scale, 1, 0.01);
   await evl(`clearTimers(); state = 'idle';`);
-  await evl(`document.getElementById('orb').dispatchEvent(new MouseEvent('dblclick', {bubbles: true}))`);
+  await evl(`talk()`); // dblclick 现在是开终端，说话直接调 talk()
   await sleep(500);
   const shot3 = await cmd('Page.captureScreenshot', { format: 'png' });
   writeFileSync('shot-normal.png', Buffer.from(shot3.data, 'base64'));
@@ -428,6 +428,14 @@ try {
   const t19b = await evl(`document.getElementById('orb').classList.contains('sleeping')`);
   checkTrue('T19 强制走路后睡颜已摘', t19b === false);
   await evl(`clearTimers(); state = 'idle'; squash.classList.remove('hop');`);
+
+  // --- T21: 双击 = 打开终端（stub 掉真实调用，别真开 Terminal）；说话已挪到菜单 ---
+  await evl(`window.__ot = 0; window.__rawOT = openKimiTerm; openKimiTerm = () => { window.__ot++; };`);
+  await evl(`document.getElementById('orb').dispatchEvent(new MouseEvent('dblclick', {bubbles: true}))`);
+  await sleep(200);
+  const t21 = await evl(`window.__ot`);
+  checkTrue('T21 双击触发打开终端', t21 === 1, `调用次数=${t21}`);
+  await evl(`openKimiTerm = window.__rawOT;`);
 } finally {
   await evl(`petAPI.debugIgnoreMouse(false)`).catch(() => {});
 }

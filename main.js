@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { aggregate, effectiveState, STALE_TTL } = require('./agent-state.cjs');
+const { spawn } = require('child_process');
 
 // 单实例锁：桌宠不需要双胞胎，重复启动直接退出（误双击/重复 npm start 都不会下崽）
 // KIMI_PET_ALLOW_MULTI=1 放行：测试场景需要与常驻实例并存的隔离实例时用
@@ -90,6 +91,7 @@ function buildMenu() {
   return Menu.buildFromTemplate([
     { label: '睡觉 / 叫醒', click: () => win && win.webContents.send('toggle-sleep') },
     { label: '说句话', click: () => win && win.webContents.send('talk') },
+    { label: '打开 Kimi Code 终端', click: openKimiTerminal },
     { label: '大小', submenu: sizeItems },
     {
       label: '模式', submenu: [
@@ -108,6 +110,48 @@ function buildMenu() {
     { label: '退出', click: () => app.quit() }
   ]);
 }
+
+// 双击/菜单：开一个 Kimi Code 终端（login shell 跑 kimi，PATH 走用户自己的配置）
+const GHOSTTY_APP = '/Applications/Ghostty.app';
+function openKimiTerminal() {
+  try {
+    if (process.platform === 'darwin') {
+      if (fs.existsSync(GHOSTTY_APP)) {
+        spawn(path.join(GHOSTTY_APP, 'Contents', 'MacOS', 'ghostty'),
+          ['-e', process.env.SHELL || '/bin/zsh', '-lc', 'kimi'],
+          { detached: true, stdio: 'ignore' }).unref();
+      } else {
+        installGhosttyThenOpen();
+      }
+      return;
+    }
+    if (process.platform === 'win32') {
+      spawn('cmd', ['/c', 'start', 'cmd', '/k', 'kimi'], { detached: true, stdio: 'ignore' }).unref();
+    }
+  } catch (e) {
+    console.log('[terminal] 打开终端失败:', e.message);
+  }
+}
+
+// 没装 Ghostty：有 Homebrew 就自动装（装完自动开）；没 brew 退回 Terminal.app
+function installGhosttyThenOpen() {
+  const brew = ['/opt/homebrew/bin/brew', '/usr/local/bin/brew'].find(p => fs.existsSync(p));
+  if (!brew) {
+    toast('没装 Ghostty 也没有 Homebrew，先用 Terminal 顶一下');
+    spawn('osascript', ['-e', 'tell application "Terminal"', '-e', 'activate',
+      '-e', 'do script "kimi"', '-e', 'end tell'], { detached: true, stdio: 'ignore' }).unref();
+    return;
+  }
+  toast('在给你装 Ghostty，装完自动开终端…');
+  const inst = spawn(brew, ['install', '--cask', 'ghostty'], { detached: true, stdio: 'ignore' });
+  inst.on('close', (code) => {
+    if (code === 0 && fs.existsSync(GHOSTTY_APP)) openKimiTerminal();
+    else toast('Ghostty 装失败了，去 ghostty.org 手动装一下吧');
+  });
+}
+
+// 气泡通报（装终端进度等）
+function toast(text) { if (win) win.webContents.send('pet-toast', text); }
 
 function createWindow() {
   const wa = screen.getPrimaryDisplay().workArea;
@@ -271,6 +315,9 @@ function createWindow() {
     if (!win || !dragOrigin) return;
     win.setPosition(Math.round(dragOrigin.x + dx), Math.round(dragOrigin.y + dy));
   });
+
+  // 双击：开一个 Kimi Code 终端
+  ipcMain.on('pet-open-terminal', openKimiTerminal);
 
   // 调试用：回报主进程权威状态（自动化测试断言用）
   ipcMain.handle('pet-debug-state', () => ({

@@ -134,8 +134,9 @@
 if (!window.petAPI) {
   window.petAPI = {
     step: () => {}, onStepDone: () => {}, dragStart: () => {}, dragTo: () => {}, resize: () => {},
+    openTerminal: () => {},
     onScale: () => {}, onCursor: () => {}, onMode: () => {}, onAgentState: () => {},
-    onToggleSleep: () => {}, onTalk: () => {}
+    onToggleSleep: () => {}, onTalk: () => {}, onToast: () => {}
   };
 }
 
@@ -521,7 +522,10 @@ function talk() {
   setTimeout(() => { orb.classList.remove('talking'); talking = false; }, 2200);
 }
 petAPI.onTalk(talk);
-orb.addEventListener('dblclick', talk);
+petAPI.onToast(t => say(t, 3000)); // 主进程通报（装 Ghostty 进度等）
+orb.addEventListener('dblclick', () => openKimiTerm()); // 双击开 Kimi Code 终端（说话走右键菜单）
+// 独立函数：测试时替换它来拦截双击（contextBridge 暴露的对象是冻结的，stub 不了）
+function openKimiTerm() { petAPI.openTerminal(); }
 
 /* ---------- 滚轮调节大小 ---------- */
 orb.addEventListener('wheel', e => {

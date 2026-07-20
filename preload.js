@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('petAPI', {
   dragTo: (payload) => ipcRenderer.send('pet-drag', payload),
   // 滚轮调节大小（dy 正负决定方向，ax/ay 为鼠标视口坐标，vw/vh 为视口宽高）
   resize: (payload) => ipcRenderer.send('pet-resize', payload),
+  // 双击：打开一个 Kimi Code 终端
+  openTerminal: () => ipcRenderer.send('pet-open-terminal'),
   // 主进程通报当前缩放倍数（气泡反向补偿用）
   onScale: (cb) => ipcRenderer.on('pet-scale', (_e, s) => cb(s)),
   // 主进程通报光标屏幕坐标（眼睛追踪用）
@@ -28,5 +30,7 @@ contextBridge.exposeInMainWorld('petAPI', {
   debugResetAgent: () => ipcRenderer.invoke('pet-debug-reset-agent'),
   // 右键菜单事件
   onToggleSleep: (cb) => ipcRenderer.on('toggle-sleep', () => cb()),
-  onTalk: (cb) => ipcRenderer.on('talk', () => cb())
+  onTalk: (cb) => ipcRenderer.on('talk', () => cb()),
+  // 主进程气泡通报（装终端进度等）
+  onToast: (cb) => ipcRenderer.on('pet-toast', (_e, t) => cb(t))
 });
