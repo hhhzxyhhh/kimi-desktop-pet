@@ -77,9 +77,9 @@ await cmd('Runtime.enable');
 await cmd('Page.enable');
 
 try {
-  // --- 屏蔽真实鼠标 + 冻结状态机（防走路干扰测量） ---
+  // --- 屏蔽真实鼠标 + 冻结状态机（防走路干扰测量；强制 stay，不管用户设置里是不是 kolo） ---
   await evl(`petAPI.debugIgnoreMouse(true)`);
-  await evl(`clearTimers(); state = 'drag';`);
+  await evl(`clearTimers(); state = 'drag'; mode = 'stay';`);
   await sleep(300);
 
   // --- T0a: 启动即同步缩放（持久化恢复到非 1 时，渲染层 curScale 必须跟上，否则气泡补偿错） ---

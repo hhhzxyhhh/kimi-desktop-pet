@@ -99,13 +99,17 @@
   .bubble.clickable { pointer-events: auto; cursor: pointer; }
   /* 气泡主体反向补偿窗口 zoom，任何尺寸下保持固定视觉大小 */
   /* 气泡主体：反向补偿窗口 zoom，保持固定视觉大小；装不下时收敛，绝不截断 */
+  /* 气泡主体：白底玻璃风（淡蓝描边呼应球色），反向补偿窗口 zoom，装不下时收敛，绝不截断 */
   .bubble-body {
-    position: relative; background: #22304a; color: #fff; padding: 7px 13px;
+    position: relative; background: rgba(255,255,255,.92); color: #1d2b4f; padding: 7px 13px;
     border-radius: 13px; font-size: 13px; white-space: nowrap; transform-origin: 50% 100%;
+    border: 1.5px solid rgba(25,131,252,.35);
+    box-shadow: 0 4px 14px rgba(25,60,140,.18);
+    backdrop-filter: blur(6px);
   }
   .bubble-body::after {
     content: ""; position: absolute; bottom: -6px; left: 50%; margin-left: -6px;
-    border: 6px solid transparent; border-top-color: #22304a; border-bottom: 0;
+    border: 6px solid transparent; border-top-color: rgba(255,255,255,.92); border-bottom: 0;
   }
 
   /* 多会话指示点：球脚下一排（Dock 式"运行中"指示），每个开着的会话窗口一颗 */

@@ -197,8 +197,10 @@ function createWindow() {
   scale = Math.min(Math.max(st.scale || 1, MIN_SCALE), MAX_SCALE);
   mode = st.mode === 'stay' ? 'stay' : 'kolo';
   dblAction = st.dblclick === 'website' ? 'website' : 'terminal';
-  // 超强提醒超时：菜单只给 1/5/10，环境变量可给任意分钟数（测试用）
-  remindMin = [1, 5, 10].includes(st.remindMin) ? st.remindMin : (Number(process.env.KIMI_PET_REMIND_MIN) || 0);
+  // 超强提醒超时：菜单只给 1/5/10；KIMI_PET_REMIND_MIN 是测试覆盖通道，设了就优先于设置文件
+  remindMin = process.env.KIMI_PET_REMIND_MIN !== undefined
+    ? (Number(process.env.KIMI_PET_REMIND_MIN) || 0)
+    : ([1, 5, 10].includes(st.remindMin) ? st.remindMin : 0);
   const size0 = Math.round(SIZE * scale);
   const onScreen = (x, y) => screen.getAllDisplays().some(d => {
     const a = d.workArea;
