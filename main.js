@@ -4,7 +4,7 @@ const { app, BrowserWindow, Menu, Tray, nativeImage, ipcMain, screen } = require
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { aggregate, STALE_TTL } = require('./agent-state.cjs');
+const { aggregate, effectiveState, STALE_TTL } = require('./agent-state.cjs');
 
 // 单实例锁：桌宠不需要双胞胎，重复启动直接退出（误双击/重复 npm start 都不会下崽）
 // KIMI_PET_ALLOW_MULTI=1 放行：测试场景需要与常驻实例并存的隔离实例时用
@@ -16,6 +16,9 @@ let win = null;
 let tray = null;
 let scale = 1;     // 当前缩放倍数，实际窗口边长 = SIZE * scale
 let mode = 'kolo'; // 行为模式：stay 乖乖待着 / kolo 到处乱跑（kimi only live once）
+let lastSessions = []; // 最近一次聚合出的活跃会话清单（菜单"会话状态"用）
+// 会话状态的中文名（菜单明细用）
+const SESSION_LABEL = { working: '在忙', searching: '搜索中', thinking: '思考中', permission: '等你批准', ask: '问你问题', done: '刚搞定', error: '出错了', idle: '空闲' };
 
 // 持久化：记住上次的大小和位置（userData/settings.json）
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
@@ -93,6 +96,13 @@ function buildMenu() {
         { label: 'stay', type: 'radio', checked: mode === 'stay', click: () => setMode('stay') },
         { label: 'kolo', type: 'radio', checked: mode === 'kolo', click: () => setMode('kolo') }
       ]
+    },
+    // 会话状态明细：每个活跃 Kimi Code 会话一行（项目名 + 状态），纯展示
+    {
+      label: `会话状态（${lastSessions.length}）`,
+      submenu: lastSessions.length
+        ? lastSessions.map(x => ({ label: `「${x.proj || x.id}」${SESSION_LABEL[x.state] || x.state}`, enabled: false }))
+        : [{ label: '（没有活跃会话）', enabled: false }]
     },
     { type: 'separator' },
     { label: '退出', click: () => app.quit() }
@@ -173,7 +183,7 @@ function createWindow() {
   const agentStateDir = process.env.KIMI_PET_STATE_DIR || path.join(app.getPath('userData'), 'agent-state');
   // 旧版本的全局单状态文件已弃用，顺手清掉
   try { fs.rmSync(path.join(app.getPath('userData'), 'agent-state.json'), { force: true }); } catch {}
-  let lastAgent = 'idle';
+  let lastAgent = 'idle', lastSesSig = '[]';
   const lastEventTs = new Map(); // 会话 id → 上次见到的事件 ts（同状态新事件也要重新通报）
   setInterval(() => {
     if (!win) return;
@@ -188,18 +198,25 @@ function createWindow() {
       let s = null;
       try { s = JSON.parse(fs.readFileSync(path.join(agentStateDir, f), 'utf8')); } catch {}
       if (!s || !Number.isFinite(s.ts)) continue;
-      if (now - s.ts > STALE_TTL) { // 死会话残留（进程被强杀，没发 SessionEnd），清掉
+      if (effectiveState(s, now).stale) { // 死会话残留（关终端没发 SessionEnd），清掉
         try { fs.rmSync(path.join(agentStateDir, f), { force: true }); } catch {}
         lastEventTs.delete(id);
         continue;
       }
       if (lastEventTs.get(id) !== s.ts) { lastEventTs.set(id, s.ts); isNewEvent = true; }
-      sessions.push(s);
+      sessions.push({ ...s, id });
     }
     const { state, ts } = aggregate(sessions, now);
-    if (state !== lastAgent || isNewEvent) {
+    // 渲染层用的会话清单（指示点/完成播报/菜单明细）：所有活着的会话（含空闲），死会话已在上面的循环清掉
+    const sesList = sessions
+      .map(s => ({ id: s.id, proj: s.proj || '', state: effectiveState(s, now).state }));
+    const sesSig = JSON.stringify(sesList);
+    lastSessions = sesList;
+    // 清单变化（会话完成/过期退场）即使没有新事件也要通报，否则徽标和菜单会过期
+    if (state !== lastAgent || isNewEvent || sesSig !== lastSesSig) {
       lastAgent = state;
-      win.webContents.send('agent-state', { state, ts });
+      lastSesSig = sesSig;
+      win.webContents.send('agent-state', { state, ts, sessions: sesList });
     }
   }, 500);
 
@@ -269,7 +286,7 @@ function createWindow() {
     if (win) win.setIgnoreMouseEvents(!!flag);
   });
   // 调试用：重置 agent 状态跟踪（长测试套件里让用例互不污染）
-  ipcMain.handle('pet-debug-reset-agent', () => { lastAgent = 'idle'; lastEventTs.clear(); });
+  ipcMain.handle('pet-debug-reset-agent', () => { lastAgent = 'idle'; lastSesSig = '[]'; lastEventTs.clear(); });
 }
 
 app.whenReady().then(() => {

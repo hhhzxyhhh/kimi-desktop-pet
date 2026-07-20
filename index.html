@@ -96,6 +96,7 @@
   }
   .bubble.show { transform: translateX(-50%) scale(1); }
   /* 气泡主体反向补偿窗口 zoom，任何尺寸下保持固定视觉大小 */
+  /* 气泡主体：反向补偿窗口 zoom，保持固定视觉大小；装不下时收敛，绝不截断 */
   .bubble-body {
     position: relative; background: #22304a; color: #fff; padding: 7px 13px;
     border-radius: 13px; font-size: 13px; white-space: nowrap; transform-origin: 50% 100%;
@@ -104,6 +105,17 @@
     content: ""; position: absolute; bottom: -6px; left: 50%; margin-left: -6px;
     border: 6px solid transparent; border-top-color: #22304a; border-bottom: 0;
   }
+
+  /* 多会话指示点：球脚下一排（Dock 式"运行中"指示），每个开着的会话窗口一颗 */
+  /* 绿=在干活，灰=空闲，红=出错/等你批准或回答 */
+  .ses-dots {
+    position: absolute; bottom: 2px; left: 50%;
+    transform: translateX(-50%); transform-origin: 50% 100%;
+    display: flex; gap: 6px; pointer-events: none;
+  }
+  .ses-dot { width: 8px; height: 8px; border-radius: 50%; background: #4cd97b; box-shadow: 0 0 4px rgba(76,217,123,.8); }
+  .ses-dot.gray { background: #9aa5b1; box-shadow: none; opacity: .7; }
+  .ses-dot.red { background: #ff5252; box-shadow: 0 0 4px rgba(255,82,82,.8); }
 
   .orb.talking .squash { animation: talkBob .5s ease-in-out infinite; }
   @keyframes talkBob { 0%, 100% { transform: translateY(0) scale(1,1); } 50% { transform: translateY(-6px) scale(.98,1.03); } }
@@ -116,6 +128,7 @@
     <div class="zzz" id="zzz"><span>z</span><span>Z</span><span>z</span></div>
   </div>
   <div class="bubble" id="bubble"><div class="bubble-body" id="bubbleBody"></div></div>
+  <div class="ses-dots" id="sesDots"></div>
 <script>
 /* ---------- 浏览器兜底：直接双击 index.html 也能预览（只是不会满屏走） ---------- */
 if (!window.petAPI) {
@@ -215,22 +228,30 @@ const orb = document.getElementById('orb');
 const squash = document.getElementById('squash');
 const bubble = document.getElementById('bubble');
 const bubbleBody = document.getElementById('bubbleBody');
+const sesDots = document.getElementById('sesDots');
 squash.innerHTML = orbSvg();
 
 function setExpr(e) { orb.dataset.expr = e; }
 
-/* ---------- 气泡（主体反向补偿窗口 zoom；装不下时收敛，绝不截断） ---------- */
+/* ---------- 气泡（反向补偿窗口 zoom；装不下时收敛，但字号尽量不低于 12px） ---------- */
 let bubbleTimer = null;
 let curScale = 1;
 function fitBubble() {
   const w = bubbleBody.offsetWidth, h = bubbleBody.offsetHeight;
   if (!w || !h) return;
-  // 窗口 CSS 宽恒为 240，气泡底边锚在头顶上方（距顶 68px）：
-  // 补偿系数 capped，保证气泡完整落在窗口内、不被截断
+  // 窗口 CSS 宽恒为 240，气泡底边锚在头顶上方（距顶 68px）：cMax 保证不截断
   const cMax = Math.min(236 / w, 68 / h);
-  bubbleBody.style.transform = `scale(${Math.min(1 / curScale, cMax)})`;
+  // 视觉字号下限 12px（13*0.923）：塞得下就守住下限，物理上塞不下仍按 cMax 收敛
+  const t = Math.min(1 / curScale, cMax);
+  const t12 = (12 / 13) / curScale;
+  bubbleBody.style.transform = `scale(${Math.min(Math.max(t, t12), cMax)})`;
 }
-petAPI.onScale(s => { curScale = s; fitBubble(); });
+// 指示点：随球缩放，但不小于固定尺寸（球小时按 1/curScale 补偿，球大时跟球一起大）
+petAPI.onScale(s => {
+  curScale = s;
+  fitBubble();
+  sesDots.style.transform = `translateX(-50%) scale(${Math.max(1, 1 / s)})`;
+});
 
 function say(text, ms) {
   bubbleBody.textContent = text;
@@ -251,9 +272,12 @@ petAPI.onMode(m => {
 
 /* ---------- Kimi Code 联动：agent 状态覆盖表情（drag/sleep 时不打扰） ---------- */
 let agentState = null, agentFaceSince = 0, agentQueueTimer = null;
+let agentSessions = []; // 主进程下发的活跃会话清单 [{id, proj, state}]
+let lastDotSig = '';    // 指示点 DOM 的清单签名，没变不重绘
 const agentExprMap = { thinking: 'think', working: 'focus', searching: 'search', permission: 'notice', ask: 'question', done: 'happy', error: 'dizzy' };
-petAPI.onAgentState(({ state: s }) => {
-  const next = s === 'idle' ? null : s;
+petAPI.onAgentState((p) => {
+  updateSessions(p.sessions || []); // 徽标与完成播报即时更新，不受思考脸排队影响
+  const next = p.state === 'idle' ? null : p.state;
   const now = Date.now();
   // 思考脸至少挂 1.2s：思考→调工具常常不足一秒，不兜底就一闪而过
   if (agentState === 'thinking' && next !== 'thinking' && now - agentFaceSince < 1200) {
@@ -263,11 +287,37 @@ petAPI.onAgentState(({ state: s }) => {
   }
   applyAgentState(next);
 });
+// 会话清单：新进入 done 的会话点名播报（哪个好了）；脚下指示点数量=开着的窗口数
+// 估算一段文本按 fitBubble 规则渲染后的视觉字号（13px 基准、单行）
+function fitFontPx(text) {
+  const w = text.length * 13 + 26;
+  const cMax = Math.min(236 / w, 68 / 31);
+  return 13 * Math.min(1 / curScale, cMax) * curScale;
+}
+function updateSessions(list) {
+  const prevDone = new Set(agentSessions.filter(x => x.state === 'done').map(x => x.id));
+  for (const x of list) {
+    if (x.state === 'done' && !prevDone.has(x.id)) {
+      // 项目名太长会把字号压过 12px 下限：达不到就降级为「搞定！」，全名去"会话状态"菜单看
+      const proj = x.proj || '那边';
+      const short = proj.length > 10 ? proj.slice(0, 9) + '…' : proj;
+      const full = `「${short}」搞定！`;
+      say(fitFontPx(full) >= 12 ? full : '搞定！', 3000);
+    }
+  }
+  agentSessions = list;
+  // 清单没变就不动 DOM（每 500ms 都会来一帧）；红=要处理，灰=空闲，绿=在干活
+  const sig = list.map(x => x.id + ':' + x.state).join();
+  if (sig !== lastDotSig) {
+    lastDotSig = sig;
+    const dotClass = (s) => ['permission', 'ask', 'error'].includes(s) ? ' red' : (s === 'idle' ? ' gray' : '');
+    sesDots.innerHTML = list.map(x => `<span class="ses-dot${dotClass(x.state)}"></span>`).join('');
+  }
+}
 function applyAgentState(next) {
   const was = agentState;
   agentState = next;
   if (next && next !== was) agentFaceSince = Date.now();
-  if (agentState === 'done' && was !== 'done') say('搞定！', 1500);
   if (agentState && state === 'sleep') wake(false);      // 来活了叫醒
   else if (agentState && orb.classList.contains('sleeping')) orb.classList.remove('sleeping'); // 状态/类名兜底同步
   else if (agentState && state === 'walk') toIdle();     // 开工期间原地上班，不乱跑

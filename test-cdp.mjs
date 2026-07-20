@@ -213,7 +213,7 @@ try {
   // 测试实例通过 KIMI_PET_STATE_DIR 指到这个独立目录，与真实 hook 的状态目录隔离
   const writeAgent = (state, ageMs = 0, ev, session = 'test-session') => {
     mkdirSync(agentDir, { recursive: true });
-    writeFileSync(join(agentDir, session + '.json'), JSON.stringify({ state, ev, ts: Date.now() - ageMs }));
+    writeFileSync(join(agentDir, session + '.json'), JSON.stringify({ state, ev, proj: session, ts: Date.now() - ageMs }));
   };
   await evl(`clearTimers(); state = 'idle';`);
   writeAgent('searching');
@@ -305,6 +305,38 @@ try {
   await sleep(900);
   const t18c = await evl(`document.getElementById('orb').dataset.expr`);
   checkTrue('T18 全部空闲恢复默认', t18c === 'default', `expr=${t18c}`);
+
+  // --- T20: 多会话可视化：指示点（数量=会话数，红=需注意）+ 完成播报点名 ---
+  rmSync(agentDir, { recursive: true, force: true }); // 先清掉前面用例的残留会话文件
+  writeAgent('working', 0, 'PreToolUse', 'session-a');
+  await sleep(900);
+  const t20a = await evl(`document.querySelectorAll('.ses-dot').length`);
+  checkTrue('T20 单会话也有一颗点', t20a === 1, `点数=${t20a}`);
+  writeAgent('working', 0, 'PreToolUse', 'session-b');
+  await sleep(900);
+  const t20b = await evl(`({ all: document.querySelectorAll('.ses-dot').length, red: document.querySelectorAll('.ses-dot.red').length })`);
+  checkTrue('T20 两个在忙两颗绿点', t20b.all === 2 && t20b.red === 0, JSON.stringify(t20b));
+  writeAgent('permission', 0, undefined, 'session-b'); // B 等批准 → 一红一绿
+  await sleep(900);
+  const t20c = await evl(`({ all: document.querySelectorAll('.ses-dot').length, red: document.querySelectorAll('.ses-dot.red').length })`);
+  checkTrue('T20 B 等批准一红一绿', t20c.all === 2 && t20c.red === 1, JSON.stringify(t20c));
+  writeAgent('done', 0, undefined, 'session-a'); // A 完成：播报点名
+  await sleep(900);
+  const t20d = await evl(`document.getElementById('bubbleBody').textContent`);
+  checkTrue('T20 完成播报点名', t20d.includes('session-a'), t20d);
+  writeAgent('idle', 0, undefined, 'session-a');
+  writeAgent('idle', 0, undefined, 'session-b');
+  await sleep(900);
+  const t20e = await evl(`({ all: document.querySelectorAll('.ses-dot').length, gray: document.querySelectorAll('.ses-dot.gray').length })`);
+  checkTrue('T20 空闲窗口两颗灰点', t20e.all === 2 && t20e.gray === 2, JSON.stringify(t20e));
+  rmSync(join(agentDir, 'session-a.json'), { force: true }); // 关闭一个窗口（SessionEnd 删文件）
+  await sleep(900);
+  const t20f = await evl(`document.querySelectorAll('.ses-dot').length`);
+  checkTrue('T20 关一个窗口少一颗点', t20f === 1, `点数=${t20f}`);
+  rmSync(join(agentDir, 'session-b.json'), { force: true });
+  await sleep(900);
+  const t20g = await evl(`document.querySelectorAll('.ses-dot').length`);
+  checkTrue('T20 全部关闭点清空', t20g === 0, `点数=${t20g}`);
   rmSync(agentDir, { recursive: true, force: true });
 
   // --- T4: 大尺寸气泡：完整 + 贴在头顶上方 ---

@@ -7,7 +7,7 @@
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "test": "node test-hook.cjs && node test-agent-state.cjs",
+    "test": "node test-hook.cjs && node test-agent-state.cjs && node test-pet-hook.cjs",
     "dist:mac": "electron-builder --mac",
     "dist:win": "electron-builder --win"
   },

@@ -2,7 +2,8 @@
 // 每个 Kimi Code 会话一个状态文件，桌宠按优先级汇总：
 // 需要用户响应(permission/ask) > 出错(error) > 在忙(working/searching/thinking) > 完成庆祝(done) > 空闲
 const FLASH_TTL = { done: 3500, error: 5000 }; // 瞬时庆祝/报错：闪一下就恢复
-const STALE_TTL = 2 * 3600 * 1000; // 会话文件 2h 没更新：会话多半已死（没来得及发 SessionEnd），不计入
+const STALE_TTL = 24 * 3600 * 1000; // 活跃状态兜底 24h：正常干活事件会不断刷新，只有单工具调用超一天/僵尸会话才会碰到
+const IDLE_TTL = 5 * 60 * 1000;    // 空闲状态只留 5min：终端被直接关掉时收不到 SessionEnd，灰点最多挂 5 分钟
 const TIER = { permission: 5, ask: 5, error: 4, working: 3, searching: 3, thinking: 3, done: 2, idle: 1 };
 
 // 单个会话文件 → 有效状态：done/error 过期转 idle；PostToolUse 的 working 连续 15s
@@ -13,7 +14,9 @@ function effectiveState(s, now) {
   const flash = FLASH_TTL[state];
   if (flash && now - s.ts >= flash) { state = 'idle'; ts = now; }
   if (state === 'working' && s.ev === 'PostToolUse' && now - s.ts > 15000) { state = 'thinking'; ts = now; }
-  return { state, ts, stale: now - s.ts > STALE_TTL };
+  // 推导为空闲的会话按 IDLE_TTL 清场（关终端收不到 SessionEnd 的兜底），活跃会话按 STALE_TTL
+  const ttl = state === 'idle' ? IDLE_TTL : STALE_TTL;
+  return { state, ts, stale: now - s.ts > ttl };
 }
 
 // sessions: [{state, ev, ts}] → { state, ts }：跳过空闲与死会话，同优先级取事件最新的
@@ -28,4 +31,4 @@ function aggregate(sessions, now) {
   return best ? { state: best.state, ts: best.ts } : { state: 'idle', ts: now };
 }
 
-module.exports = { effectiveState, aggregate, FLASH_TTL, STALE_TTL, TIER };
+module.exports = { effectiveState, aggregate, FLASH_TTL, STALE_TTL, IDLE_TTL, TIER };

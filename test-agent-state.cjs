@@ -1,6 +1,6 @@
 // agent-state.cjs 单元测试：多会话状态聚合（纯 Node，任何平台可跑）
 // 用法: node test-agent-state.cjs
-const { effectiveState, aggregate, STALE_TTL } = require('./agent-state.cjs');
+const { effectiveState, aggregate, STALE_TTL, IDLE_TTL } = require('./agent-state.cjs');
 
 let failures = 0;
 function check(name, actual, expected, detail = '') {
@@ -24,6 +24,10 @@ check('error 5s 内是 error', effectiveState(S('error', 4500), NOW).state, 'err
 check('error 过期转 idle', effectiveState(S('error', 6000), NOW).state, 'idle');
 check('超过 STALE_TTL 标记 stale', effectiveState(S('working', STALE_TTL + 1000, 'PreToolUse'), NOW).stale, true);
 check('缺 ts 视为 stale', effectiveState({ state: 'working' }, NOW).stale, true);
+check('idle 5 分钟内不算 stale', effectiveState(S('idle', IDLE_TTL - 1000), NOW).stale, false);
+check('idle 超 5 分钟算 stale（关终端兜底）', effectiveState(S('idle', IDLE_TTL + 1000), NOW).stale, true);
+check('done 过期后按 idle 档位清场', effectiveState(S('done', IDLE_TTL + 1000), NOW).stale, true);
+check('等你批准不受 IDLE_TTL 影响', effectiveState(S('permission', IDLE_TTL + 1000), NOW).stale, false);
 
 /* ---------- aggregate：多会话聚合 ---------- */
 check('无会话 → idle', aggregate([], NOW).state, 'idle');

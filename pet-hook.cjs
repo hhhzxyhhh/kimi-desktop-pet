@@ -5,13 +5,13 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-// 与 Electron userData 对齐的状态目录路径（跨平台）
+// 与 Electron userData 对齐的状态目录路径（跨平台）；KIMI_PET_STATE_DIR 可覆盖（测试隔离用）
 const appData = process.platform === 'darwin'
   ? path.join(os.homedir(), 'Library', 'Application Support')
   : process.platform === 'win32'
     ? path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'))
     : path.join(os.homedir(), '.config');
-const STATE_DIR = path.join(appData, 'kimi-desktop-pet', 'agent-state');
+const STATE_DIR = process.env.KIMI_PET_STATE_DIR || path.join(appData, 'kimi-desktop-pet', 'agent-state');
 
 let input = '';
 process.stdin.on('data', c => { input += c; });
@@ -46,6 +46,8 @@ process.stdin.on('end', () => {
     if (ev === 'SessionEnd') { fs.rmSync(file, { force: true }); return; }
     fs.mkdirSync(STATE_DIR, { recursive: true });
     // ev 带给主进程：PostToolUse 的 working 超时无动作才降级为 thinking
-    fs.writeFileSync(file, JSON.stringify({ state, tool, ev, ts: Date.now() }));
+    // proj 带给渲染层：完成播报/会话菜单显示项目名（cwd 末级目录）
+    const proj = p.cwd ? path.basename(p.cwd) : '';
+    fs.writeFileSync(file, JSON.stringify({ state, tool, ev, proj, ts: Date.now() }));
   } catch {}
 });
