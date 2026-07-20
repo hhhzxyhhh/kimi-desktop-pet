@@ -92,6 +92,8 @@ function buildMenu() {
     { label: '睡觉 / 叫醒', click: () => win && win.webContents.send('toggle-sleep') },
     { label: '说句话', click: () => win && win.webContents.send('talk') },
     { label: '打开 Kimi Code 终端', click: openKimiTerminal },
+    // 通知样式（横幅/提醒）只能用户在系统设置改：帮他直接打开设置页
+    { label: '通知样式设置', click: () => spawn('open', ['x-apple.systempreferences:com.apple.preference.notifications'], { detached: true, stdio: 'ignore' }).unref() },
     { label: '大小', submenu: sizeItems },
     {
       label: '模式', submenu: [
@@ -138,7 +140,7 @@ function installGhosttyThenOpen() {
   const brew = ['/opt/homebrew/bin/brew', '/usr/local/bin/brew'].find(p => fs.existsSync(p));
   if (!brew) {
     // Homebrew 安装必须用户输密码，没法后台静默装：开个可见终端跑完整脚本，输完密码全自动
-    toast('要输密码哦', '弹出的终端里输入登录密码（输入时看不见字符是正常的），Homebrew 和 Ghostty 会自动装好，装完自动打开 Kimi Code 终端。', true);
+    toast('装 brew 要密码', '弹出的终端里输入登录密码（输入时看不见字符是正常的），先装 Homebrew 再自动装 Ghostty，装完自动打开 Kimi Code 终端。', true);
     const scriptPath = path.join(os.tmpdir(), 'kimi-pet-install-ghostty.sh');
     fs.writeFileSync(scriptPath, [
       '#!/bin/bash',
@@ -152,11 +154,12 @@ function installGhosttyThenOpen() {
     spawn('open', ['-a', 'Terminal.app', scriptPath], { detached: true, stdio: 'ignore' }).unref();
     return;
   }
-  toast('装 Ghostty 中…', '正在通过 Homebrew 安装 Ghostty，装完会自动打开 Kimi Code 终端。');
+  toast('装 Ghostty 中…', '正在通过 Homebrew 安装 Ghostty，装完会自动打开 Kimi Code 终端。', true);
   const inst = spawn(brew, ['install', '--cask', 'ghostty'], { detached: true, stdio: 'ignore' });
   inst.on('close', (code) => {
+    clearToast();
     if (code === 0 && fs.existsSync(GHOSTTY_APP)) openKimiTerminal();
-    else toast('装失败了', 'Ghostty 自动安装失败，可以去 ghostty.org 手动下载安装。');
+    else toast('装失败了', 'Ghostty 自动安装失败，可以去 ghostty.org 手动下载安装。', true);
   });
 }
 
@@ -167,6 +170,8 @@ function toast(text, notify, sticky) {
     new Notification({ title: 'Kimi 桌宠', body: notify }).show();
   }
 }
+// 清掉常驻气泡（比如装完 Ghostty 时收掉进度提示）
+function clearToast() { if (win) win.webContents.send('pet-toast', { clear: true }); }
 
 function createWindow() {
   const wa = screen.getPrimaryDisplay().workArea;
