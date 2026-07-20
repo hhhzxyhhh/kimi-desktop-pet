@@ -1,6 +1,6 @@
 // Kimi 桌宠 · 主进程
 // 透明无边框小窗，置顶悬浮；宠物"走路"= 窗口本身在屏幕上平移
-const { app, BrowserWindow, Menu, Tray, nativeImage, ipcMain, screen, Notification } = require('electron');
+const { app, BrowserWindow, Menu, Tray, nativeImage, ipcMain, screen, Notification, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -17,6 +17,7 @@ let win = null;
 let tray = null;
 let scale = 1;     // 当前缩放倍数，实际窗口边长 = SIZE * scale
 let mode = 'kolo'; // 行为模式：stay 乖乖待着 / kolo 到处乱跑（kimi only live once）
+let dblAction = 'terminal'; // 双击动作：terminal 开 Kimi Code 终端 / website 开官网
 let lastSessions = []; // 最近一次聚合出的活跃会话清单（菜单"会话状态"用）
 // 会话状态的中文名（菜单明细用）
 const SESSION_LABEL = { working: '在忙', searching: '搜索中', thinking: '思考中', permission: '等你批准', ask: '问你问题', done: '刚搞定', error: '出错了', idle: '空闲' };
@@ -33,7 +34,7 @@ function saveSettings() {
     if (!win) return;
     const [x, y] = win.getPosition();
     // 合并保留其他键（如 agentLinkInstalled），不整个覆盖
-    fs.writeFile(settingsFile(), JSON.stringify({ ...loadSettings(), scale, x, y, mode }), () => {});
+    fs.writeFile(settingsFile(), JSON.stringify({ ...loadSettings(), scale, x, y, mode, dblclick: dblAction }), () => {});
   }, 400);
 }
 
@@ -53,6 +54,12 @@ function ensureAgentHook() {
 function setMode(m) {
   mode = m;
   if (win) win.webContents.send('set-mode', m);
+  saveSettings();
+}
+
+// 切换双击动作（terminal 开终端 / website 开官网）
+function setDblAction(a) {
+  dblAction = a;
   saveSettings();
 }
 
@@ -99,6 +106,13 @@ function buildMenu() {
       label: '模式', submenu: [
         { label: 'stay', type: 'radio', checked: mode === 'stay', click: () => setMode('stay') },
         { label: 'kolo', type: 'radio', checked: mode === 'kolo', click: () => setMode('kolo') }
+      ]
+    },
+    // 双击动作：开终端 or 开官网
+    {
+      label: '双击', submenu: [
+        { label: '打开 Kimi Code 终端', type: 'radio', checked: dblAction === 'terminal', click: () => setDblAction('terminal') },
+        { label: '打开官网', type: 'radio', checked: dblAction === 'website', click: () => setDblAction('website') }
       ]
     },
     // 会话状态明细：每个活跃 Kimi Code 会话一行（项目名 + 状态），纯展示
@@ -180,6 +194,7 @@ function createWindow() {
   const st = loadSettings();
   scale = Math.min(Math.max(st.scale || 1, MIN_SCALE), MAX_SCALE);
   mode = st.mode === 'stay' ? 'stay' : 'kolo';
+  dblAction = st.dblclick === 'website' ? 'website' : 'terminal';
   const size0 = Math.round(SIZE * scale);
   const onScreen = (x, y) => screen.getAllDisplays().some(d => {
     const a = d.workArea;
@@ -336,8 +351,11 @@ function createWindow() {
     win.setPosition(Math.round(dragOrigin.x + dx), Math.round(dragOrigin.y + dy));
   });
 
-  // 双击：开一个 Kimi Code 终端
-  ipcMain.on('pet-open-terminal', openKimiTerminal);
+  // 双击：按用户设置开终端或开官网
+  ipcMain.on('pet-open-terminal', () => {
+    if (dblAction === 'website') shell.openExternal('https://www.kimi.com');
+    else openKimiTerminal();
+  });
 
   // 调试用：回报主进程权威状态（自动化测试断言用）
   ipcMain.handle('pet-debug-state', () => ({
@@ -386,5 +404,5 @@ app.on('before-quit', () => {
   clearTimeout(saveTimer);
   if (!win) return;
   const [x, y] = win.getPosition();
-  try { fs.writeFileSync(settingsFile(), JSON.stringify({ ...loadSettings(), scale, x, y, mode })); } catch {}
+  try { fs.writeFileSync(settingsFile(), JSON.stringify({ ...loadSettings(), scale, x, y, mode, dblclick: dblAction })); } catch {}
 });
