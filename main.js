@@ -88,8 +88,6 @@ function setScale(s, fx = 0.5, fy = 0.5) {
 function buildMenu() {
   return Menu.buildFromTemplate([
     { label: '打开 Kimi Code 终端', click: openKimiTerminal },
-    // 通知样式（横幅/提醒）只能用户在系统设置改：帮他直接打开设置页（macOS 专属，Windows 没有这个概念）
-    ...(process.platform === 'darwin' ? [{ label: '通知样式设置', click: () => spawn('open', ['x-apple.systempreferences:com.apple.preference.notifications'], { detached: true, stdio: 'ignore' }).unref() }] : []),
     {
       label: '模式', submenu: [
         { label: 'stay', type: 'radio', checked: mode === 'stay', click: () => setMode('stay') },
