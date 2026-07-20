@@ -28,49 +28,16 @@ function saveSettings() {
   }, 400);
 }
 
-// Kimi Code 联动自动安装：检测到 Kimi Code 家目录就把 hook 装好。
-// 用户手动卸载过（settings 有安装标记但配置已没了）则尊重，不再自动装。
+// Kimi Code 联动自动安装：逻辑在 agent-hook.cjs（纯 Node 模块，可单测），这里只负责接线
+const { ensureAgentHook: installAgentHook } = require('./agent-hook.cjs');
 function ensureAgentHook() {
-  try {
-    const kimiHome = process.env.KIMI_CODE_HOME || path.join(os.homedir(), '.kimi-code');
-    if (!fs.existsSync(kimiHome)) return; // 没装 Kimi Code，跳过
-    const MARK = 'pet-hook.cjs';
-    const EVENTS = ['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PermissionRequest', 'PermissionResult',
-      'Stop', 'StopFailure', 'Interrupt', 'SessionStart', 'SessionEnd', 'Notification'];
-    const hookDst = path.join(kimiHome, 'hooks', MARK);
-    const cfg = path.join(kimiHome, 'config.toml');
-    const cfgText = fs.existsSync(cfg) ? fs.readFileSync(cfg, 'utf8') : '';
-    const st = loadSettings();
-    if (cfgText.includes(MARK)) {
-      // 已安装：同步脚本内容，并补齐新增事件（老配置自动升级）
-      const src = fs.readFileSync(path.join(__dirname, MARK), 'utf8');
-      const dst = fs.existsSync(hookDst) ? fs.readFileSync(hookDst, 'utf8') : '';
-      if (src !== dst) fs.copyFileSync(path.join(__dirname, MARK), hookDst);
-      // 注意按"同一 hook 块内既有事件名又有 pet-hook.cjs"判断，别家 hook 的同名事件不算
-      const missing = EVENTS.filter(e =>
-        !new RegExp(`event\\s*=\\s*"${e}"[\\s\\S]{0,200}pet-hook\\.cjs`).test(cfgText));
-      if (missing.length) {
-        const block = missing.map(e =>
-          `\n[[hooks]]\nevent = "${e}"\ncommand = "node \\"${hookDst}\\""\ntimeout = 3\n`).join('');
-        fs.appendFileSync(cfg, block);
-        console.log('[agent-link] 已补充 hook 事件:', missing.join(', '));
-      }
-      if (!st.agentLinkInstalled) {
-        fs.writeFileSync(settingsFile(), JSON.stringify({ ...st, agentLinkInstalled: true }));
-      }
-      return;
-    }
-    if (st.agentLinkInstalled) return; // 用户手动卸载过，不再自动装
-    fs.mkdirSync(path.dirname(hookDst), { recursive: true });
-    fs.copyFileSync(path.join(__dirname, MARK), hookDst);
-    const block = EVENTS.map(e =>
-      `\n[[hooks]]\nevent = "${e}"\ncommand = "node \\"${hookDst}\\""\ntimeout = 3\n`).join('');
-    fs.appendFileSync(cfg, block);
-    fs.writeFileSync(settingsFile(), JSON.stringify({ ...st, agentLinkInstalled: true }));
-    console.log('[agent-link] hook 已自动安装到', hookDst);
-  } catch (e) {
-    console.log('[agent-link] 自动安装跳过:', e.message);
-  }
+  installAgentHook({
+    kimiHome: process.env.KIMI_CODE_HOME || path.join(os.homedir(), '.kimi-code'),
+    hookSrc: path.join(__dirname, 'pet-hook.cjs'),
+    loadSettings,
+    // 合并保留其他键（scale/x/y/mode），不整个覆盖
+    patchSettings: (patch) => fs.writeFileSync(settingsFile(), JSON.stringify({ ...loadSettings(), ...patch })),
+  });
 }
 
 // 切换行为模式并通报渲染层
@@ -227,7 +194,7 @@ function createWindow() {
   // 滚轮缩放：往上滚变大，往下滚变小，步进 8%，以鼠标位置为锚点
   // ax/ay 与 vw/vh 同为渲染层视口坐标，相除即锚点相对位置，与 zoom 坐标语义无关
   ipcMain.on('pet-resize', (event, { dy, ax, ay, vw, vh }) => {
-    if (!win || !vw || !vh) return;
+    if (!win || !vw || !vh || !dy) return; // dy=0（横向滚动等）不该触发缩放
     let next = Math.round(scale * (dy < 0 ? 1.08 : 1 / 1.08) * 100) / 100;
     if (next > 0.94 && next < 1.06) next = 1; // 经过标准尺寸附近时吸附，方便回正
     setScale(next, ax / vw, ay / vh);

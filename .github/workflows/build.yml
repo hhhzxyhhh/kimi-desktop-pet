@@ -19,6 +19,8 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
+      - name: 单元测试（纯 Node，Windows runner 上即真 Windows 环境）
+        run: npm test
       - name: 打包
         shell: bash
         run: |
