@@ -423,10 +423,15 @@ function poke() {
   squash.classList.remove('poked');
   void squash.offsetWidth;
   squash.classList.add('poked');
-  say(pokeTexts[Math.floor(Math.random() * pokeTexts.length)], 750);
-  if (Math.random() < .35) {
+  // 40% 冒爱心眼（气泡带 💙），35% 吓得瞪眼（互斥）；竞态防护：复位时若表情已被别的状态改掉，不再覆盖
+  const r = Math.random();
+  const love = r < .4;
+  say(pokeTexts[Math.floor(Math.random() * pokeTexts.length)] + (love ? ' 💙' : ''), 750);
+  if (love) {
+    setExpr('love');
+    setTimeout(() => { if (orb.dataset.expr === 'love') refreshFace(); }, 800);
+  } else if (r < .75) {
     setExpr('shock');
-    // 竞态防护：复位时若表情已被别的状态（如睡觉）改掉，不再覆盖回 default
     setTimeout(() => { if (orb.dataset.expr === 'shock') refreshFace(); }, 650);
   }
   setTimeout(() => { squash.classList.remove('poked'); poking = false; }, 520);
@@ -512,11 +517,6 @@ function talk() {
   if (talking || state === 'sleep' || state === 'drag') return;
   talking = true;
   orb.classList.add('talking');
-  // 说话时 40% 冒爱心眼
-  if (Math.random() < .4) {
-    setExpr('love');
-    setTimeout(() => { if (orb.dataset.expr === 'love') refreshFace(); }, 2200);
-  }
   say(talkTexts[Math.floor(Math.random() * talkTexts.length)], 2200);
   setTimeout(() => { orb.classList.remove('talking'); talking = false; }, 2200);
 }
