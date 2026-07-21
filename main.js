@@ -26,6 +26,11 @@ let dblAction = 'terminal'; // 双击动作：terminal 开 Kimi Code 终端 / we
 let remindMin = 0; // 超强提醒（分钟）：permission/ask 超时没人理就闪现到光标旁蹦跶；0=关
 // 坐标数值守卫：NaN 和 INT_MIN 之类的哨兵/溢出值都会让 setPosition/setBounds 抛异常
 const saneCoord = (v) => Number.isFinite(v) && Math.abs(v) < 100000;
+// setPosition 防弹衣：崩溃改成记日志（连同肇事值），异常对话框不再吓用户
+function safeSetPosition(tag, x, y) {
+  try { win.setPosition(x, y); }
+  catch (e) { console.log(`[setPosition:${tag}] 拒绝执行 (${x}, ${y}):`, e.message); }
+}
 let lastSessions = []; // 最近一次聚合出的活跃会话清单（菜单"会话状态"用）
 // 会话状态的中文名（菜单明细用）
 const SESSION_LABEL = { working: '在忙', searching: '搜索中', thinking: '思考中', permission: '等你批准', ask: '问你问题', done: '刚搞定', error: '出错了', idle: '空闲' };
@@ -339,7 +344,7 @@ function createWindow() {
             body: `「${att.proj || '那边'}」${att.state === 'ask' ? '在问你问题' : '在等你批准'}，去看看吧` }).show();
         }
       } else if (remindOrigin && !remindDragged) {
-        win.setPosition(remindOrigin[0], remindOrigin[1]); // 没被用户拖走才送回，拖过就尊重新位置
+        safeSetPosition("remind-restore", remindOrigin[0], remindOrigin[1]); // 没被用户拖走才送回，拖过就尊重新位置
       }
       remindOrigin = remind ? remindOrigin : null;
       win.webContents.send('super-remind', remind);
@@ -353,7 +358,7 @@ function createWindow() {
         p.x + (Math.random() - 0.5) * 160 - size / 2,
         p.y + (Math.random() - 0.5) * 120 - 40 - size / 2, size);
       lastRemindTarget = { x: Math.round(c.x), y: Math.round(c.y) };
-      win.setPosition(lastRemindTarget.x, lastRemindTarget.y);
+      safeSetPosition("remind", lastRemindTarget.x, lastRemindTarget.y);
     }
     // 清单变化（会话完成/过期退场）即使没有新事件也要通报，否则徽标和菜单会过期
     if (state !== lastAgent || isNewEvent || sesSig !== lastSesSig) {
@@ -394,7 +399,7 @@ function createWindow() {
     const mx = Math.trunc(stepFracX), my = Math.trunc(stepFracY);
     stepFracX -= mx; stepFracY -= my;
     const want = clampStep(areas, x + mx, y + my, size, tx, ty);
-    win.setPosition(want.x, want.y);
+    safeSetPosition("step", want.x, want.y);
     // macOS 对菜单栏这类交界处有"禁区"：落点被拒（系统强行挪回）时，
     // 直接跳进补了内收的目标屏里——跨屏就该是一跳，不是硬挤
     const [ax, ay] = win.getPosition();
@@ -403,7 +408,7 @@ function createWindow() {
       const r = nearestArea(areas, hasT ? tx : want.x + size / 2, hasT ? ty : want.y + size / 2);
       if (r) {
         const j = clampToRect({ x: r.x + 8, y: r.y + 8, width: r.width - 16, height: r.height - 16 }, want.x, want.y, size);
-        win.setPosition(j.x, j.y);
+        safeSetPosition("step-jump", j.x, j.y);
       }
     }
   });
@@ -419,7 +424,7 @@ function createWindow() {
   ipcMain.on('pet-drag', (event, { dx, dy }) => {
     if (!win || !dragOrigin || !saneCoord(dx) || !saneCoord(dy) ||
         !saneCoord(dragOrigin.x) || !saneCoord(dragOrigin.y)) return;
-    win.setPosition(Math.round(dragOrigin.x + dx), Math.round(dragOrigin.y + dy));
+    safeSetPosition('drag', Math.round(dragOrigin.x + dx), Math.round(dragOrigin.y + dy));
   });
 
   // 双击：按用户设置开终端或开官网
@@ -483,7 +488,7 @@ app.whenReady().then(() => {
     if (!areas.length) return;
     const [x, y] = win.getPosition();
     const c = clampWindow(areas, x, y, win.getSize()[0]);
-    win.setPosition(c.x, c.y);
+    safeSetPosition("display-removed", c.x, c.y);
   });
 });
 
