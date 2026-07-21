@@ -329,12 +329,15 @@ function createWindow() {
       try { s = JSON.parse(fs.readFileSync(path.join(agentStateDir, f), 'utf8')); } catch {}
       if (!s || !Number.isFinite(s.ts)) continue;
       // 进程探活：hook 记录的调用方 pid 链全灭 = CLI 已死，直接清场（不等 TTL）
-      if (Array.isArray(s.pids) && s.pids.length && !s.pids.some(pidAlive)) {
+      const hasLivePid = Array.isArray(s.pids) && s.pids.length && s.pids.some(pidAlive);
+      if (Array.isArray(s.pids) && s.pids.length && !hasLivePid) {
         try { fs.rmSync(path.join(agentStateDir, f), { force: true }); } catch {}
         lastEventTs.delete(id);
         continue;
       }
-      if (effectiveState(s, now).stale) { // 死会话残留（关终端没发 SessionEnd），清掉
+      // 超时清场只在没有活 pid 时生效：CLI 活着的长任务/等批准随便挂（空闲状态仍按 5 分钟淡出）
+      const e = effectiveState(s, now);
+      if (e.stale && !(hasLivePid && e.state !== 'idle')) {
         try { fs.rmSync(path.join(agentStateDir, f), { force: true }); } catch {}
         lastEventTs.delete(id);
         continue;

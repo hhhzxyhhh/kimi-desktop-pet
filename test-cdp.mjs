@@ -468,13 +468,18 @@ try {
   check('T22 提醒结束回到原位 x', t22d.x - t22pre.x, 0, 8);
   check('T22 提醒结束回到原位 y', t22d.y - t22pre.y, 0, 8);
 
-  // --- T23: 进程探活：pid 链全灭的会话直接清场，活着才显示 ---
+  // --- T23: 进程探活：pid 链全灭的会话直接清场；活 pid 的长任务随便挂 ---
   await evl(`petAPI.debugResetAgent(); agentState = null; agentFaceSince = 0;`);
   writeFileSync(join(agentDir, 'dead-ses.json'), JSON.stringify({ state: 'working', proj: 'dead', pids: [99999999], ts: Date.now() }));
   writeFileSync(join(agentDir, 'live-ses.json'), JSON.stringify({ state: 'working', proj: 'live', pids: [1], ts: Date.now() })); // launchd 永远活着
   await sleep(1200);
   const t23a = await evl(`document.querySelectorAll('.ses-dot').length`);
   checkTrue('T23 死 pid 会话被清，活 pid 会话留点', t23a === 1, `点数=${t23a}`);
+  // 活 pid 的 working 即使挂 3 小时也不按 TTL 清（长任务随便挂）
+  writeFileSync(join(agentDir, 'live-ses.json'), JSON.stringify({ state: 'working', proj: 'live', pids: [1], ts: Date.now() - 3 * 3600 * 1000 }));
+  await sleep(1200);
+  const t23b = await evl(`document.querySelectorAll('.ses-dot').length`);
+  checkTrue('T23 活 pid 长任务不清场', t23b === 1, `点数=${t23b}`);
   writeFileSync(join(agentDir, 'live-ses.json'), JSON.stringify({ state: 'idle', pids: [1], ts: Date.now() }));
   rmSync(join(agentDir, 'dead-ses.json'), { force: true });
   rmSync(join(agentDir, 'live-ses.json'), { force: true });
