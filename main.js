@@ -335,9 +335,9 @@ function createWindow() {
         lastEventTs.delete(id);
         continue;
       }
-      // 超时清场只在没有活 pid 时生效：CLI 活着的长任务/等批准随便挂（空闲状态仍按 5 分钟淡出）
+      // 超时清场只在没有活 pid 时生效：CLI 活着的会话（不管忙闲）一直保留；死了立即清场
       const e = effectiveState(s, now);
-      if (e.stale && !(hasLivePid && e.state !== 'idle')) {
+      if (e.stale && !hasLivePid) {
         try { fs.rmSync(path.join(agentStateDir, f), { force: true }); } catch {}
         lastEventTs.delete(id);
         continue;

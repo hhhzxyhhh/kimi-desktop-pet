@@ -480,6 +480,11 @@ try {
   await sleep(1200);
   const t23b = await evl(`document.querySelectorAll('.ses-dot').length`);
   checkTrue('T23 活 pid 长任务不清场', t23b === 1, `点数=${t23b}`);
+  // 活 pid 的 idle 挂 10 分钟也保留灰点（开着的窗口就是开着的窗口）
+  writeFileSync(join(agentDir, 'live-ses.json'), JSON.stringify({ state: 'idle', proj: 'live', pids: [1], ts: Date.now() - 10 * 60 * 1000 }));
+  await sleep(1200);
+  const t23c = await evl(`document.querySelectorAll('.ses-dot.gray').length`);
+  checkTrue('T23 活 pid 空闲灰点也保留', t23c === 1, `灰点=${t23c}`);
   writeFileSync(join(agentDir, 'live-ses.json'), JSON.stringify({ state: 'idle', pids: [1], ts: Date.now() }));
   rmSync(join(agentDir, 'dead-ses.json'), { force: true });
   rmSync(join(agentDir, 'live-ses.json'), { force: true });
