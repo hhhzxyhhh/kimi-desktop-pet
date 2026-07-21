@@ -417,15 +417,15 @@ try {
   }
   checkTrue('T8 kolo 模式 30 次 decide 至少散一次步', walks > 0, `walks=${walks}`);
 
-  // --- T14: kolo 满屏乱跑（目标点模式，明显位移 + 向目标方向移动） ---
+  // --- T14: kolo 散步（目标钉在右下角边缘区，不路过屏幕中心） ---
   const w0 = await geom();
-  await evl(`{ window.__r = Math.random; Math.random = () => 0.05; startWalk(); Math.random = window.__r; }`);
+  await evl(`{ window.__i = 0; window.__r = Math.random; Math.random = () => [0.1, 0.9, 0.9][window.__i++ % 3]; startWalk(); Math.random = window.__r; }`);
   await sleep(3000);
   const w1 = await geom();
   await evl(`clearTimers(); state = 'idle'; squash.classList.remove('hop');`);
   const moved = Math.hypot(w1.x - w0.x, w1.y - w0.y);
-  checkTrue('T14 乱跑明显位移', moved > 10, `位移=${moved.toFixed(1)}`);
-  checkTrue('T14 朝左上目标移动', w1.x < w0.x && w1.y <= w0.y, `dx=${(w1.x - w0.x).toFixed(1)} dy=${(w1.y - w0.y).toFixed(1)}`);
+  checkTrue('T14 散步明显位移', moved > 10, `位移=${moved.toFixed(1)}`);
+  checkTrue('T14 朝右下目标移动', w1.x > w0.x && w1.y >= w0.y, `dx=${(w1.x - w0.x).toFixed(1)} dy=${(w1.y - w0.y).toFixed(1)}`);
 
   // --- T19: 睡觉中被强制拉去走路，睡颜类必须摘掉（不许一边睡一边蹦） ---
   await evl(`clearTimers(); startSleep();`);
