@@ -271,6 +271,8 @@ function createWindow() {
   let lastAgent = 'idle', lastSesSig = '[]';
   const lastEventTs = new Map(); // 会话 id → 上次见到的事件 ts（同状态新事件也要重新通报）
   let reminding = false, lastRemindMove = 0; // 超强提醒状态与上次闪现时间
+  let remindSuppressed = false;              // 拖拽中渲染层要求抑制闪现
+  let remindOrigin = null, remindDragged = false; // 提醒进场前的位置 / 期间是否被用户拖过
   setInterval(() => {
     if (!win) return;
     const now = Date.now();
@@ -302,9 +304,16 @@ function createWindow() {
     const remind = remindMin > 0 && needsReminder(sessions, now, remindMin * 60000);
     if (remind !== reminding) {
       reminding = remind;
+      if (reminding) {
+        remindOrigin = win.getPosition(); // 进场前记住家，散场送回去（闪现会改持久化位置）
+        remindDragged = false;
+      } else if (remindOrigin && !remindDragged) {
+        win.setPosition(remindOrigin[0], remindOrigin[1]); // 没被用户拖走才送回，拖过就尊重新位置
+      }
+      remindOrigin = remind ? remindOrigin : null;
       win.webContents.send('super-remind', remind);
     }
-    if (reminding && now - lastRemindMove > 1200) {
+    if (reminding && !remindSuppressed && now - lastRemindMove > 1200) {
       lastRemindMove = now;
       const p = screen.getCursorScreenPoint();
       const size = win.getSize()[0];
@@ -379,6 +388,12 @@ function createWindow() {
   ipcMain.on('pet-open-terminal', () => {
     if (dblAction === 'website') shell.openExternal('https://www.kimi.com');
     else openKimiTerminal();
+  });
+
+  // 拖拽时抑制提醒闪现（渲染层通报）；提醒期间被拖过就不送回原位了
+  ipcMain.on('pet-remind-suppress', (_e, f) => {
+    remindSuppressed = !!f;
+    if (f && reminding) remindDragged = true;
   });
 
   // 调试用：回报主进程权威状态（自动化测试断言用）

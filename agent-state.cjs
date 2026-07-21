@@ -4,6 +4,7 @@
 const FLASH_TTL = { done: 3500, error: 5000 }; // 瞬时庆祝/报错：闪一下就恢复
 const STALE_TTL = 24 * 3600 * 1000; // 活跃状态兜底 24h：正常干活事件会不断刷新，只有单工具调用超一天/僵尸会话才会碰到
 const IDLE_TTL = 5 * 60 * 1000;    // 空闲状态只留 5min：终端被直接关掉时收不到 SessionEnd，灰点最多挂 5 分钟
+const REMIND_MAX_AGE = 30 * 60 * 1000; // 单次提醒最长 30 分钟：再不理就当你知道了，红点留着但别再闪了
 const TIER = { permission: 5, ask: 5, error: 4, working: 3, searching: 3, thinking: 3, done: 2, idle: 1 };
 
 // 单个会话文件 → 有效状态：done/error 过期转 idle；PostToolUse 的 working 连续 15s
@@ -32,12 +33,14 @@ function aggregate(sessions, now) {
 }
 
 // 超强提醒判定：有没有超时未处理的 permission/ask 会话（等你批准/问你问题没人理）
+// age 超过 REMIND_MAX_AGE 就不再闪：提醒是手段不是骚扰，红点指示保留
 function needsReminder(sessions, now, timeoutMs) {
   return sessions.some(s => {
     if (!s || !Number.isFinite(s.ts)) return false;
     const e = effectiveState(s, now);
-    return !e.stale && ['permission', 'ask'].includes(e.state) && now - s.ts > timeoutMs;
+    const age = now - s.ts;
+    return !e.stale && ['permission', 'ask'].includes(e.state) && age > timeoutMs && age < REMIND_MAX_AGE;
   });
 }
 
-module.exports = { effectiveState, aggregate, needsReminder, FLASH_TTL, STALE_TTL, IDLE_TTL, TIER };
+module.exports = { effectiveState, aggregate, needsReminder, FLASH_TTL, STALE_TTL, IDLE_TTL, REMIND_MAX_AGE, TIER };

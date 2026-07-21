@@ -440,7 +440,8 @@ try {
   await evl(`openKimiTerm = window.__rawOT;`);
 
   // --- T22: 超强提醒：超时 permission → 闪现到光标旁 + hop；处理后恢复（实例需带 KIMI_PET_REMIND_MIN=1） ---
-  await evl(`clearTimers(); state = 'idle';`);
+  await evl(`clearTimers(); toIdle();`); // 用 toIdle 让 decide 排上队，验证提醒结束后不会永久待机
+  const t22pre = await geom();
   writeAgent('permission', 70000, undefined, 'session-x'); // 70s 前的权限申请（提醒超时 1min）
   await sleep(1500);
   const t22a = await evl(`petAPI.debugState().then(s => ({
@@ -453,6 +454,11 @@ try {
   await sleep(900);
   const t22b = await evl(`document.getElementById('squash').classList.contains('hop')`);
   checkTrue('T22 处理后停止蹦跶', t22b === false);
+  const t22c = await evl(`stateTimer !== null`);
+  checkTrue('T22 提醒结束后 decide 已重排（不永久待机）', t22c === true);
+  const t22d = await geomSettled();
+  check('T22 提醒结束回到原位 x', t22d.x - t22pre.x, 0, 8);
+  check('T22 提醒结束回到原位 y', t22d.y - t22pre.y, 0, 8);
 } finally {
   await evl(`petAPI.debugIgnoreMouse(false)`).catch(() => {});
 }

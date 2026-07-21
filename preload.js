@@ -34,5 +34,7 @@ contextBridge.exposeInMainWorld('petAPI', {
   // 主进程气泡通报（装终端进度等；sticky 时气泡常驻等用户点掉）
   onToast: (cb) => ipcRenderer.on('pet-toast', (_e, p) => cb(p)),
   // 超强提醒开关：permission/ask 超时没人理，宠物闪现到光标旁上蹿下跳
-  onSuperRemind: (cb) => ipcRenderer.on('super-remind', (_e, on) => cb(on))
+  onSuperRemind: (cb) => ipcRenderer.on('super-remind', (_e, on) => cb(on)),
+  // 拖拽时抑制提醒闪现（不然球会从手里被抢走）
+  remindSuppress: (f) => ipcRenderer.send('pet-remind-suppress', f)
 });

@@ -142,7 +142,7 @@ if (!window.petAPI) {
     step: () => {}, onStepDone: () => {}, dragStart: () => {}, dragTo: () => {}, resize: () => {},
     openTerminal: () => {},
     onScale: () => {}, onCursor: () => {}, onMode: () => {}, onAgentState: () => {},
-    onToggleSleep: () => {}, onTalk: () => {}, onToast: () => {}, onSuperRemind: () => {}
+    onToggleSleep: () => {}, onTalk: () => {}, onToast: () => {}, onSuperRemind: () => {}, remindSuppress: () => {}
   };
 }
 
@@ -437,6 +437,7 @@ petAPI.onSuperRemind(on => {
   reminding = on;
   if (on) {
     if (state === 'sleep') wake(false);
+    if (state === 'walk') toIdle(); // 正在散步也让道，不然步进和闪现抢窗口
     orb.classList.remove('sleeping');
     squash.classList.remove('breathe');
     squash.classList.add('hop'); // 上蹿下跳
@@ -445,6 +446,8 @@ petAPI.onSuperRemind(on => {
     squash.classList.remove('hop');
     squash.classList.add('breathe');
     refreshFace();
+    // 提醒期间 decide 被冻结，结束时若正闲着要重新排上，否则永久待机
+    if (state === 'idle' && !stateTimer) stateTimer = setTimeout(decide, 3000 + Math.random() * 4000);
   }
 });
 
@@ -494,6 +497,7 @@ window.addEventListener('pointermove', e => {
   if (!dragging && Math.hypot(e.screenX - pressX, e.screenY - pressY) > 5) {
     dragging = true;
     dragStartT = performance.now();
+    petAPI.remindSuppress(true); // 拎着的时候不许闪现抢走
     clearTimers();
     state = 'drag';
     orb.classList.remove('sleeping');
@@ -521,6 +525,7 @@ window.addEventListener('pointercancel', onPointerEnd);
 function onPointerEnd() {
   if (!pressing) return;
   pressing = false;
+  petAPI.remindSuppress(false); // 松手恢复闪现
   if (dragging) {
     dragging = false;
     squash.style.transition = '';
@@ -528,6 +533,7 @@ function onPointerEnd() {
     squash.classList.add('wobble');
     setTimeout(() => squash.classList.remove('wobble'), 720);
     toIdle(); // 先回 idle，refreshFace 才不会被 drag 守卫拦住
+    if (reminding) { squash.classList.remove('breathe'); squash.classList.add('hop'); } // 还在提醒就恢复蹦跶
     // 松手落地：20% 概率晕一下
     if (Math.random() < .2) {
       setExpr('dizzy');

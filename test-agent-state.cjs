@@ -1,6 +1,6 @@
 // agent-state.cjs 单元测试：多会话状态聚合（纯 Node，任何平台可跑）
 // 用法: node test-agent-state.cjs
-const { effectiveState, aggregate, needsReminder, STALE_TTL, IDLE_TTL } = require('./agent-state.cjs');
+const { effectiveState, aggregate, needsReminder, STALE_TTL, IDLE_TTL, REMIND_MAX_AGE } = require('./agent-state.cjs');
 
 let failures = 0;
 function check(name, actual, expected, detail = '') {
@@ -50,6 +50,8 @@ check('ask 超时也提醒', needsReminder([S('ask', 400000)], NOW, 300000), tru
 check('working 再久也不提醒', needsReminder([S('working', 400000, 'PreToolUse')], NOW, 60000), false);
 check('idle 不提醒', needsReminder([S('idle', 400000)], NOW, 60000), false);
 check('死会话不提醒', needsReminder([S('permission', STALE_TTL + 1000)], NOW, 60000), false);
+check('提醒 30 分钟内有效', needsReminder([S('permission', 20 * 60000)], NOW, 60000), true);
+check('提醒超 30 分钟自动收手', needsReminder([S('permission', REMIND_MAX_AGE + 1000)], NOW, 60000), false);
 check('无会话不提醒', needsReminder([], NOW, 60000), false);
 
 console.log(failures === 0 ? '\n全部通过 ✅' : `\n${failures} 项失败 ❌`);
