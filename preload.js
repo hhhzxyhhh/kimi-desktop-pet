@@ -30,7 +30,6 @@ contextBridge.exposeInMainWorld('petAPI', {
   debugResetAgent: () => ipcRenderer.invoke('pet-debug-reset-agent'),
   // 右键菜单事件
   onToggleSleep: (cb) => ipcRenderer.on('toggle-sleep', () => cb()),
-  onTalk: (cb) => ipcRenderer.on('talk', () => cb()),
   // 主进程气泡通报（装终端进度等；sticky 时气泡常驻等用户点掉）
   onToast: (cb) => ipcRenderer.on('pet-toast', (_e, p) => cb(p)),
   // 超强提醒开关：permission/ask 超时没人理，宠物闪现到光标旁上蹿下跳

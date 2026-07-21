@@ -343,7 +343,7 @@ try {
 
   // --- T4: 大尺寸气泡：完整 + 贴在头顶上方 ---
   await evl(`clearTimers(); state = 'idle';`);
-  await evl(`talk()`); // dblclick 现在是开终端，说话直接调 talk()
+  await evl(`say('写代码别忘了喝水', 2000)`);
   await sleep(500);
   const shot1 = await cmd('Page.captureScreenshot', { format: 'png' });
   writeFileSync('shot-big.png', Buffer.from(shot1.data, 'base64'));
@@ -363,7 +363,7 @@ try {
   check('T5 最小窗口宽', g2.w, Math.round(240 * 0.4), 2);
   check('T5 zoom=scale', g2.zoom, g2.scale, 0.01);
   await evl(`clearTimers(); state = 'idle';`);
-  await evl(`talk()`); // dblclick 现在是开终端，说话直接调 talk()
+  await evl(`say('写代码别忘了喝水', 2000)`);
   await sleep(500);
   const shot2 = await cmd('Page.captureScreenshot', { format: 'png' });
   writeFileSync('shot-small.png', Buffer.from(shot2.data, 'base64'));
@@ -391,7 +391,7 @@ try {
   console.log('T7 回标准后状态:', JSON.stringify(g3));
   check('T7 回到 scale 1', g3.scale, 1, 0.01);
   await evl(`clearTimers(); state = 'idle';`);
-  await evl(`talk()`); // dblclick 现在是开终端，说话直接调 talk()
+  await evl(`say('写代码别忘了喝水', 2000)`);
   await sleep(500);
   const shot3 = await cmd('Page.captureScreenshot', { format: 'png' });
   writeFileSync('shot-normal.png', Buffer.from(shot3.data, 'base64'));

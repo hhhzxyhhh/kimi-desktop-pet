@@ -122,9 +122,6 @@
   .ses-dot { width: 8px; height: 8px; border-radius: 50%; background: #4cd97b; box-shadow: 0 0 4px rgba(76,217,123,.8); }
   .ses-dot.gray { background: #9aa5b1; box-shadow: none; opacity: .7; }
   .ses-dot.red { background: #ff5252; box-shadow: 0 0 4px rgba(255,82,82,.8); }
-
-  .orb.talking .squash { animation: talkBob .5s ease-in-out infinite; }
-  @keyframes talkBob { 0%, 100% { transform: translateY(0) scale(1,1); } 50% { transform: translateY(-6px) scale(.98,1.03); } }
 </style>
 </head>
 <body>
@@ -142,7 +139,7 @@ if (!window.petAPI) {
     step: () => {}, onStepDone: () => {}, dragStart: () => {}, dragTo: () => {}, resize: () => {},
     openTerminal: () => {},
     onScale: () => {}, onCursor: () => {}, onMode: () => {}, onAgentState: () => {},
-    onToggleSleep: () => {}, onTalk: () => {}, onToast: () => {}, onSuperRemind: () => {}, remindSuppress: () => {}
+    onToggleSleep: () => {}, onToast: () => {}, onSuperRemind: () => {}, remindSuppress: () => {}
   };
 }
 
@@ -453,7 +450,8 @@ petAPI.onSuperRemind(on => {
 
 /* ---------- 戳 & 拖拽 ---------- */
 const pokeTexts = ['啵！', '呜', '别戳啦', '？', '再戳要漏气了', '嗷呜',
-  'bug 会解决的', '陪着你呢', '摸摸鱼，精神好', '写完没就戳我'];
+  'bug 会解决的', '陪着你呢', '摸摸鱼，精神好', '写完没就戳我',
+  '我是 Kimi', '今天也要加油哦', '别忘了喝水', '起来走两步', '早点睡哦'];
 let poking = false;
 function poke() {
   if (poking) return;
@@ -546,28 +544,8 @@ function onPointerEnd() {
   }
 }
 
-/* ---------- 说话 ---------- */
-const talkTexts = [
-  '你好呀，我是 Kimi',
-  '今天也要加油哦',
-  '写代码别忘了喝水',
-  '别卷了，起来走两步',
-  '早点睡，失眠星人',
-  '深呼吸，bug 会解决的',
-  '我在这儿陪着你呢',
-  '摸摸鱼，精神好',
-  '代码写完了吗就戳我'
-];
-let talking = false;
-function talk() {
-  if (talking || state === 'sleep' || state === 'drag') return;
-  talking = true;
-  orb.classList.add('talking');
-  say(talkTexts[Math.floor(Math.random() * talkTexts.length)], 2200);
-  setTimeout(() => { orb.classList.remove('talking'); talking = false; }, 2200);
-}
-petAPI.onTalk(talk);
-petAPI.onToast(p => { // 主进程通报（装 Ghostty 进度等）；clear 收掉常驻气泡
+/* ---------- 主进程通报（装 Ghostty 进度等）；clear 收掉常驻气泡 ---------- */
+petAPI.onToast(p => {
   if (p.clear) { bubble.classList.remove('show', 'clickable'); return; }
   p.sticky ? saySticky(p.text) : say(p.text, 3000);
 });
@@ -605,7 +583,7 @@ petAPI.onToggleSleep(() => {
 (function blinkLoop() {
   setTimeout(() => {
     const e = orb.dataset.expr;
-    if (['default', 'sweat', 'love'].includes(e) && state !== 'drag' && !orb.classList.contains('talking')) {
+    if (['default', 'sweat', 'love'].includes(e) && state !== 'drag') {
       orb.classList.add('blink');
       setTimeout(() => orb.classList.remove('blink'), 170);
     }
