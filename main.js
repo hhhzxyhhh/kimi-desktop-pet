@@ -459,15 +459,20 @@ function createWindow() {
     else openKimiTerminal();
   });
 
-  // 点指示点：打开那个会话本身（Ghostty 里 kimi --session 恢复）
+  // 点指示点：打开那个会话本身（终端里 kimi --session 恢复）
   ipcMain.on('pet-open-session', (_e, { id, cwd }) => {
     try {
-      if (process.platform !== 'darwin' || !fs.existsSync(GHOSTTY_APP)) return;
       if (!/^[\w-]+$/.test(String(id || ''))) return; // session id 只允许安全字符
-      const cmd = cwd ? `cd ${JSON.stringify(cwd)} && kimi --session ${id}` : `kimi --session ${id}`;
-      spawn(path.join(GHOSTTY_APP, 'Contents', 'MacOS', 'ghostty'),
-        ['-e', process.env.SHELL || '/bin/zsh', '-lc', cmd],
-        { detached: true, stdio: 'ignore' }).unref();
+      const args = [`kimi --session ${id}`];
+      // 工作目录走 spawn cwd 参数（不拼 shell，杜绝目录名注入）
+      const opts = { cwd: cwd || undefined, detached: true, stdio: 'ignore' };
+      if (process.platform === 'darwin') {
+        if (!fs.existsSync(GHOSTTY_APP)) return;
+        spawn(path.join(GHOSTTY_APP, 'Contents', 'MacOS', 'ghostty'),
+          ['-e', process.env.SHELL || '/bin/zsh', '-lc', args[0]], opts).unref();
+      } else if (process.platform === 'win32') {
+        spawn('cmd', ['/c', 'start', 'cmd', '/k', args[0]], opts).unref();
+      }
     } catch (e) {
       console.log('[open-session] 打开失败:', e.message);
     }
