@@ -82,6 +82,12 @@ try {
   await evl(`clearTimers(); state = 'drag'; mode = 'stay';`);
   await sleep(300);
 
+  // --- 归位到主屏：多屏机器上 settings 可能把窗口恢复到外屏，后续断言按主屏几何算 ---
+  const bp = await geom();
+  await evl(`petAPI.dragStart();`);
+  await evl(`petAPI.dragTo({ dx: ${1000} - (${bp.x}), dy: ${500} - (${bp.y}) })`);
+  await sleep(300);
+
   // --- T0a: 启动即同步缩放（持久化恢复到非 1 时，渲染层 curScale 必须跟上，否则气泡补偿错） ---
   const boot = await geom();
   const bootCur = await evl(`curScale`);

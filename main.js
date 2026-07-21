@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { aggregate, effectiveState, needsReminder, STALE_TTL, REMIND_MAX_AGE } = require('./agent-state.cjs');
+const { clampWindow, clampStep, clampToRect, nearestArea } = require('./display-areas.cjs');
 const { spawn } = require('child_process');
 
 // 统一 userData：打包版 productName 是"Kimi桌宠"（默认 userData 会跟着变），
@@ -83,13 +84,12 @@ function setScale(s, fx = 0.5, fy = 0.5) {
   const oldSize = win.getSize()[0];
   scale = s;
   const size = Math.round(SIZE * s);
-  const area = screen.getPrimaryDisplay().workArea;
   let [x, y] = win.getPosition();
   x += fx * (oldSize - size);
   y += fy * (oldSize - size);
-  x = Math.max(area.x, Math.min(x, area.x + area.width - size));
-  y = Math.max(area.y, Math.min(y, area.y + area.height - size));
-  win.setBounds({ x: Math.round(x), y: Math.round(y), width: size, height: size });
+  // 多屏：钳进窗口中心最近的显示器工作区
+  const c = clampWindow(screen.getAllDisplays().map(d => d.workArea), x, y, size);
+  win.setBounds({ x: Math.round(c.x), y: Math.round(c.y), width: size, height: size });
   win.webContents.setZoomFactor(s);
   win.webContents.send('pet-scale', s);
   saveSettings();
@@ -274,7 +274,8 @@ function createWindow() {
     const b = win.getBounds();
     win.webContents.send('cursor-pos', {
       x: p.x, y: p.y, wx: b.x + b.width / 2, wy: b.y + b.height / 2,
-      area: screen.getPrimaryDisplay().workArea
+      area: screen.getPrimaryDisplay().workArea,
+      areas: screen.getAllDisplays().map(d => d.workArea) // 多屏全量工作区（散步选点用）
     });
   }, 120);
 
@@ -343,11 +344,11 @@ function createWindow() {
       lastRemindMove = now;
       const p = screen.getCursorScreenPoint();
       const size = win.getSize()[0];
-      const a = screen.getPrimaryDisplay().workArea;
-      // 光标附近随机落脚（别正压光标），钳回屏幕内
-      const nx = Math.max(a.x, Math.min(p.x + (Math.random() - 0.5) * 160 - size / 2, a.x + a.width - size));
-      const ny = Math.max(a.y, Math.min(p.y + (Math.random() - 0.5) * 120 - 40 - size / 2, a.y + a.height - size));
-      lastRemindTarget = { x: Math.round(nx), y: Math.round(ny) };
+      // 光标附近随机落脚（别正压光标），多屏钳进光标所在屏
+      const c = clampWindow(screen.getAllDisplays().map(d => d.workArea),
+        p.x + (Math.random() - 0.5) * 160 - size / 2,
+        p.y + (Math.random() - 0.5) * 120 - 40 - size / 2, size);
+      lastRemindTarget = { x: Math.round(c.x), y: Math.round(c.y) };
       win.setPosition(lastRemindTarget.x, lastRemindTarget.y);
     }
     // 清单变化（会话完成/过期退场）即使没有新事件也要通报，否则徽标和菜单会过期
@@ -376,21 +377,30 @@ function createWindow() {
   // 位置变化持久化（拖拽/走路/钳制都会触发，已防抖）
   win.on('move', saveSettings);
 
-  // 宠物走一步：窗口平移 {dx,dy}，撞到屏幕边缘则钳回（目标点散步每帧重算方向，无需回报反弹）
+  // 宠物走一步：窗口平移 {dx,dy}；多屏按 clampStep 钳制（屏内不动、死角钳进目标屏）
   // 分量可能不足 1px（小体型拆细步），小数部分按轴累积进下一步，避免取整偏差
   let stepFracX = 0, stepFracY = 0;
-  ipcMain.on('pet-step', (event, { dx, dy }) => {
+  ipcMain.on('pet-step', (event, { dx, dy, tx, ty }) => {
     if (!win || !Number.isFinite(dx) || !Number.isFinite(dy)) return;
     const [x, y] = win.getPosition();
     const size = win.getSize()[0];
-    const area = screen.getPrimaryDisplay().workArea;
+    const areas = screen.getAllDisplays().map(d => d.workArea);
     stepFracX += dx; stepFracY += dy;
     const mx = Math.trunc(stepFracX), my = Math.trunc(stepFracY);
     stepFracX -= mx; stepFracY -= my;
-    win.setPosition(
-      Math.max(area.x, Math.min(x + mx, area.x + area.width - size)),
-      Math.max(area.y, Math.min(y + my, area.y + area.height - size))
-    );
+    const want = clampStep(areas, x + mx, y + my, size, tx, ty);
+    win.setPosition(want.x, want.y);
+    // macOS 对菜单栏这类交界处有"禁区"：落点被拒（系统强行挪回）时，
+    // 直接跳进补了内收的目标屏里——跨屏就该是一跳，不是硬挤
+    const [ax, ay] = win.getPosition();
+    if (Math.abs(ax - want.x) > 2 || Math.abs(ay - want.y) > 2) {
+      const hasT = Number.isFinite(tx) && Number.isFinite(ty);
+      const r = nearestArea(areas, hasT ? tx : want.x + size / 2, hasT ? ty : want.y + size / 2);
+      if (r) {
+        const j = clampToRect({ x: r.x + 8, y: r.y + 8, width: r.width - 16, height: r.height - 16 }, want.x, want.y, size);
+        win.setPosition(j.x, j.y);
+      }
+    }
   });
 
   // 拖拽开始：主进程记下窗口当前位置
@@ -426,6 +436,7 @@ function createWindow() {
     bounds: win ? win.getBounds() : null,
     zoom: win ? win.webContents.getZoomFactor() : null,
     area: screen.getPrimaryDisplay().workArea,
+    areas: screen.getAllDisplays().map(d => d.workArea),
     cursor: screen.getCursorScreenPoint(),
     remindTarget: lastRemindTarget,
     trayBounds: tray ? tray.getBounds() : null
@@ -456,6 +467,16 @@ app.whenReady().then(() => {
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
+
+  // 多屏热插拔：显示器被拔掉时，把球钳回最近的存活屏
+  screen.on('display-removed', () => {
+    if (!win) return;
+    const areas = screen.getAllDisplays().map(d => d.workArea);
+    if (!areas.length) return;
+    const [x, y] = win.getPosition();
+    const c = clampWindow(areas, x, y, win.getSize()[0]);
+    win.setPosition(c.x, c.y);
   });
 });
 
