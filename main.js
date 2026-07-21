@@ -128,11 +128,15 @@ function buildMenu() {
         { label: '关', type: 'radio', checked: !app.getLoginItemSettings().openAtLogin, click: () => app.setLoginItemSettings({ openAtLogin: false }) }
       ]
     },
-    // 会话状态明细：每个活跃 Kimi Code 会话一行（项目名 + 状态），纯展示
+    // 会话状态明细：每个活跃 Kimi Code 会话一行（项目名 + 状态），纯展示；同项目多窗带 id 后缀区分
     {
       label: `会话状态（${lastSessions.length}）`,
       submenu: lastSessions.length
-        ? lastSessions.map(x => ({ label: `「${x.proj || x.id}」${SESSION_LABEL[x.state] || x.state}`, enabled: false }))
+        ? lastSessions.map(x => {
+            const dup = lastSessions.filter(y => y.proj && y.proj === x.proj).length > 1;
+            const name = `「${x.proj || x.id}${dup ? ' ·' + x.id.slice(-4) : ''}」`;
+            return { label: `${name}${SESSION_LABEL[x.state] || x.state}`, enabled: false };
+          })
         : [{ label: '（没有活跃会话）', enabled: false }]
     },
     { type: 'separator' },
@@ -409,8 +413,9 @@ function createWindow() {
   // 拖拽：dx/dy 是鼠标在屏幕坐标系的绝对位移，直接叠加到按下时的窗口位置。
   // 不能用 clientX：它相对窗口，窗口一动就产生反馈（实测只跟得上一半）
   ipcMain.on('pet-drag', (event, { dx, dy }) => {
-    // 防御 NaN/undefined：非鼠标指针事件可能不带屏幕坐标，setPosition 收到 NaN 会直接抛异常
-    if (!win || !dragOrigin || !Number.isFinite(dx) || !Number.isFinite(dy)) return;
+    // 防御 NaN/undefined：非鼠标指针事件可能不带屏幕坐标，窗口位置读数异常时 origin 也可能是 NaN
+    if (!win || !dragOrigin || !Number.isFinite(dx) || !Number.isFinite(dy) ||
+        !Number.isFinite(dragOrigin.x) || !Number.isFinite(dragOrigin.y)) return;
     win.setPosition(Math.round(dragOrigin.x + dx), Math.round(dragOrigin.y + dy));
   });
 
