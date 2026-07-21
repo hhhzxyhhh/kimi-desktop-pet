@@ -336,8 +336,9 @@ function createWindow() {
         continue;
       }
       // 超时清场只在没有活 pid 时生效：CLI 活着的会话（不管忙闲）一直保留；死了立即清场
+      // 但 pid 被复用的死会话会误判"活着"：24h 保险丝兜底（正常任务碰不到）
       const e = effectiveState(s, now);
-      if (e.stale && !hasLivePid) {
+      if (e.stale && (!hasLivePid || now - s.ts > 24 * 3600 * 1000)) {
         try { fs.rmSync(path.join(agentStateDir, f), { force: true }); } catch {}
         lastEventTs.delete(id);
         continue;

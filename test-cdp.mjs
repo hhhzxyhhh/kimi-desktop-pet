@@ -485,6 +485,11 @@ try {
   await sleep(1200);
   const t23c = await evl(`document.querySelectorAll('.ses-dot.gray').length`);
   checkTrue('T23 活 pid 空闲灰点也保留', t23c === 1, `灰点=${t23c}`);
+  // pid 被复用的极端情况：挂 25 小时按保险丝清场
+  writeFileSync(join(agentDir, 'live-ses.json'), JSON.stringify({ state: 'working', proj: 'live', pids: [1], ts: Date.now() - 25 * 3600 * 1000 }));
+  await sleep(1200);
+  const t23d = await evl(`document.querySelectorAll('.ses-dot').length`);
+  checkTrue('T23 超 24h 保险丝清场', t23d === 0, `点数=${t23d}`);
   writeFileSync(join(agentDir, 'live-ses.json'), JSON.stringify({ state: 'idle', pids: [1], ts: Date.now() }));
   rmSync(join(agentDir, 'dead-ses.json'), { force: true });
   rmSync(join(agentDir, 'live-ses.json'), { force: true });
