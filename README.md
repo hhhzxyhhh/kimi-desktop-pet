@@ -27,6 +27,8 @@
 
 ## 下载与使用
 
+> **依赖提醒**：双击开终端、点指示点恢复会话这些功能依赖 **[Ghostty](https://ghostty.org)** 终端（macOS，顺便说它确实好用，推荐）。没装也没关系——首次双击会自动通过 Homebrew 帮你装；没有 Homebrew 会弹出终端引导你装（输一次密码后全自动）。Windows 用系统 cmd 即可，不需要 Ghostty。
+
 **方式一：下载打包好的应用（零命令，推荐）**
 
 到 [Actions](../../../actions) 页面点最新一次成功的构建，在底部 Artifacts 下载（需登录 GitHub）：
