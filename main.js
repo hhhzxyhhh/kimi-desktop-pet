@@ -463,15 +463,17 @@ function createWindow() {
   ipcMain.on('pet-open-session', (_e, { id, cwd }) => {
     try {
       if (!/^[\w-]+$/.test(String(id || ''))) return; // session id 只允许安全字符
-      const args = [`kimi --session ${id}`];
-      // 工作目录走 spawn cwd 参数（不拼 shell，杜绝目录名注入）
-      const opts = { cwd: cwd || undefined, detached: true, stdio: 'ignore' };
+      // shell 安全引号（单引号包裹 + 内部单引号转义），防目录名注入；Ghostty 不吃 spawn 的 cwd，必须 cd
+      const q = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
       if (process.platform === 'darwin') {
         if (!fs.existsSync(GHOSTTY_APP)) return;
+        const cmd = cwd ? `cd ${q(cwd)} && kimi --session ${id}` : `kimi --session ${id}`;
         spawn(path.join(GHOSTTY_APP, 'Contents', 'MacOS', 'ghostty'),
-          ['-e', process.env.SHELL || '/bin/zsh', '-lc', args[0]], opts).unref();
+          ['-e', process.env.SHELL || '/bin/zsh', '-lc', cmd],
+          { detached: true, stdio: 'ignore' }).unref();
       } else if (process.platform === 'win32') {
-        spawn('cmd', ['/c', 'start', 'cmd', '/k', args[0]], opts).unref();
+        const cmd = cwd ? `cd /d "${String(cwd).replace(/"/g, '""')}" & kimi --session ${id}` : `kimi --session ${id}`;
+        spawn('cmd', ['/c', 'start', 'cmd', '/k', cmd], { detached: true, stdio: 'ignore' }).unref();
       }
     } catch (e) {
       console.log('[open-session] 打开失败:', e.message);
