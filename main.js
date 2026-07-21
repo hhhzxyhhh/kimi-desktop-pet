@@ -4,7 +4,7 @@ const { app, BrowserWindow, Menu, Tray, nativeImage, ipcMain, screen, Notificati
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { aggregate, effectiveState, needsReminder, STALE_TTL } = require('./agent-state.cjs');
+const { aggregate, effectiveState, needsReminder, STALE_TTL, REMIND_MAX_AGE } = require('./agent-state.cjs');
 const { spawn } = require('child_process');
 
 // 统一 userData：打包版 productName 是"Kimi桌宠"（默认 userData 会跟着变），
@@ -323,10 +323,11 @@ function createWindow() {
       if (reminding) {
         remindOrigin = win.getPosition(); // 进场前记住家，散场送回去（闪现会改持久化位置）
         remindDragged = false;
-        // 系统通知同步推一条：用户不看屏幕也能收到
+        // 系统通知同步推一条：用户不看屏幕也能收到（取刚超龄的那个会话报项目名）
         const att = sessions.find(s => {
           const e = effectiveState(s, now);
-          return !e.stale && ['permission', 'ask'].includes(e.state) && now - s.ts > remindMin * 60000;
+          const age = now - s.ts;
+          return !e.stale && ['permission', 'ask'].includes(e.state) && age > remindMin * 60000 && age < REMIND_MAX_AGE;
         });
         if (att && Notification.isSupported()) {
           new Notification({ title: 'Kimi 桌宠',
