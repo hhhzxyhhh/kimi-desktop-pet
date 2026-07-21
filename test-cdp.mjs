@@ -82,10 +82,11 @@ try {
   await evl(`clearTimers(); state = 'drag'; mode = 'stay';`);
   await sleep(300);
 
-  // --- 归位到主屏：多屏机器上 settings 可能把窗口恢复到外屏，后续断言按主屏几何算 ---
+  // --- 归位到右下角：多屏机器上 settings 可能把窗口恢复到外屏，后续断言按主屏几何算；
+  // 别停屏幕中央——用户还要干活（角落里不碍事，且远离台前调度左侧保留区） ---
   const bp = await geom();
   await evl(`petAPI.dragStart();`);
-  await evl(`petAPI.dragTo({ dx: ${1000} - (${bp.x}), dy: ${500} - (${bp.y}) })`);
+  await evl(`petAPI.dragTo({ dx: ${1200} - (${bp.x}), dy: ${650} - (${bp.y}) })`);
   await sleep(300);
 
   // --- T0a: 启动即同步缩放（持久化恢复到非 1 时，渲染层 curScale 必须跟上，否则气泡补偿错） ---

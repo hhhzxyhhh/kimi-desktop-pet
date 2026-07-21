@@ -6,6 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const { aggregate, effectiveState, needsReminder, STALE_TTL, REMIND_MAX_AGE } = require('./agent-state.cjs');
 const { clampWindow, clampStep, clampToRect, nearestArea } = require('./display-areas.cjs');
+const { applyStationaryCollectionBehavior } = require('./mac-window.cjs');
 const { spawn } = require('child_process');
 
 // 统一 userData：打包版 productName 是"Kimi桌宠"（默认 userData 会跟着变），
@@ -246,6 +247,8 @@ function createWindow() {
     skipTaskbar: true,
     fullscreenable: false,
     maximizable: false,
+    // macOS：panel 类型是浮动工具面板，台前调度不按普通文档窗口管理它（学 Clawd）
+    ...(process.platform === 'darwin' ? { type: 'panel', roundedCorners: false } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -254,8 +257,12 @@ function createWindow() {
   });
 
   // 置顶到屏保级，基本压得住普通窗口；所有工作区可见（含全屏 Space）
+  // skipTransformProcessType：配合 dock.hide，避免切 Space 时窗口被短暂隐藏（学 Clawd）
   win.setAlwaysOnTop(true, 'screen-saver');
-  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
+  // macOS 原生加固：豁免台前调度左侧保留区钳制 + 挪进 stationary 私有 Space（切 Space 动画不藏）
+  const reapplyStationary = () => applyStationaryCollectionBehavior(win);
+  reapplyStationary();
 
   win.loadFile('index.html');
 
@@ -270,7 +277,10 @@ function createWindow() {
     win.webContents.send('pet-scale', scale);
     // 同理，行为模式也要在启动时通报
     win.webContents.send('set-mode', mode);
+    reapplyStationary(); // 加载后 macOS 可能重置行为，补一刀（Clawd 的 event-level safety net 思路）
   });
+  // 位置尺寸变化后 macOS 可能又把行为洗掉，周期兜底
+  if (process.platform === 'darwin') setInterval(() => { if (win) reapplyStationary(); }, 10000);
 
   // 光标位置轮询：渲染层收不到窗口外的鼠标事件，主进程代查屏幕坐标发过去（眼睛追踪 + 游走定位用）
   // 省电：没有活跃会话时降频到 ~360ms，有会话活动保持 120ms

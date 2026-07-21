@@ -5,6 +5,9 @@
   "main": "main.js",
   "author": "张馨月",
   "license": "MIT",
+  "dependencies": {
+    "koffi": "^3.1.1"
+  },
   "scripts": {
     "start": "electron .",
     "test": "node test-hook.cjs && node test-agent-state.cjs && node test-pet-hook.cjs && node test-display-areas.cjs",
@@ -23,6 +26,7 @@
       "agent-hook.cjs",
       "agent-state.cjs",
       "display-areas.cjs",
+      "mac-window.cjs",
       "preload.js",
       "index.html",
       "pet-hook.cjs",

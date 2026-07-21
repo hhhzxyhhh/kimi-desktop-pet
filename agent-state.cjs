@@ -2,7 +2,7 @@
 // 每个 Kimi Code 会话一个状态文件，桌宠按优先级汇总：
 // 需要用户响应(permission/ask) > 出错(error) > 在忙(working/searching/thinking) > 完成庆祝(done) > 空闲
 const FLASH_TTL = { done: 3500, error: 5000 }; // 瞬时庆祝/报错：闪一下就恢复
-const STALE_TTL = 24 * 3600 * 1000; // 活跃状态兜底 24h：正常干活事件会不断刷新，只有单工具调用超一天/僵尸会话才会碰到
+const STALE_TTL = 2 * 3600 * 1000; // 活跃状态兜底 2h：正常干活事件会不断刷新，僵尸会话（强杀在工具中途）最多挂 2h
 const IDLE_TTL = 5 * 60 * 1000;    // 空闲状态只留 5min：终端被直接关掉时收不到 SessionEnd，灰点最多挂 5 分钟
 const REMIND_MAX_AGE = 30 * 60 * 1000; // 单次提醒最长 30 分钟：再不理就当你知道了，红点留着但别再闪了
 const TIER = { permission: 5, ask: 5, error: 4, working: 3, searching: 3, thinking: 3, done: 2, idle: 1 };
