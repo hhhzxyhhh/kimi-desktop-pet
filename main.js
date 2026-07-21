@@ -7,6 +7,10 @@ const os = require('os');
 const { aggregate, effectiveState, needsReminder, STALE_TTL } = require('./agent-state.cjs');
 const { spawn } = require('child_process');
 
+// 统一 userData：打包版 productName 是"Kimi桌宠"（默认 userData 会跟着变），
+// 不统一到固定目录的话，hook 写入的联动状态和打包版读的目录会对不上
+app.setPath('userData', path.join(app.getPath('appData'), 'kimi-desktop-pet'));
+
 // 单实例锁：桌宠不需要双胞胎，重复启动直接退出（误双击/重复 npm start 都不会下崽）
 // KIMI_PET_ALLOW_MULTI=1 放行：测试场景需要与常驻实例并存的隔离实例时用
 if (process.env.KIMI_PET_ALLOW_MULTI !== '1' && !app.requestSingleInstanceLock()) app.quit();
@@ -117,6 +121,9 @@ function buildMenu() {
         { label: '10 分钟', type: 'radio', checked: remindMin === 10, click: () => setRemindMin(10) }
       ]
     },
+    // 开机自启：状态以系统为准（登录项是 OS 存的）
+    { label: '开机自启', type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin,
+      click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }) },
     // 会话状态明细：每个活跃 Kimi Code 会话一行（项目名 + 状态），纯展示
     {
       label: `会话状态（${lastSessions.length}）`,
@@ -253,8 +260,12 @@ function createWindow() {
   });
 
   // 光标位置轮询：渲染层收不到窗口外的鼠标事件，主进程代查屏幕坐标发过去（眼睛追踪 + 游走定位用）
+  // 省电：没有活跃会话时降频到 ~360ms，有会话活动保持 120ms
+  let cursorTick = 0;
   setInterval(() => {
     if (!win) return;
+    const active = lastSessions.some(x => x.state !== 'idle');
+    if (!active && ++cursorTick % 3 !== 0) return;
     const p = screen.getCursorScreenPoint();
     const b = win.getBounds();
     win.webContents.send('cursor-pos', {
@@ -273,6 +284,7 @@ function createWindow() {
   let reminding = false, lastRemindMove = 0; // 超强提醒状态与上次闪现时间
   let remindSuppressed = false;              // 拖拽中渲染层要求抑制闪现
   let remindOrigin = null, remindDragged = false; // 提醒进场前的位置 / 期间是否被用户拖过
+  let lastRemindTarget = null;                    // 上次闪现落点（测试断言用）
   setInterval(() => {
     if (!win) return;
     const now = Date.now();
@@ -307,6 +319,15 @@ function createWindow() {
       if (reminding) {
         remindOrigin = win.getPosition(); // 进场前记住家，散场送回去（闪现会改持久化位置）
         remindDragged = false;
+        // 系统通知同步推一条：用户不看屏幕也能收到
+        const att = sessions.find(s => {
+          const e = effectiveState(s, now);
+          return !e.stale && ['permission', 'ask'].includes(e.state) && now - s.ts > remindMin * 60000;
+        });
+        if (att && Notification.isSupported()) {
+          new Notification({ title: 'Kimi 桌宠',
+            body: `「${att.proj || '那边'}」${att.state === 'ask' ? '在问你问题' : '在等你批准'}，去看看吧` }).show();
+        }
       } else if (remindOrigin && !remindDragged) {
         win.setPosition(remindOrigin[0], remindOrigin[1]); // 没被用户拖走才送回，拖过就尊重新位置
       }
@@ -321,7 +342,8 @@ function createWindow() {
       // 光标附近随机落脚（别正压光标），钳回屏幕内
       const nx = Math.max(a.x, Math.min(p.x + (Math.random() - 0.5) * 160 - size / 2, a.x + a.width - size));
       const ny = Math.max(a.y, Math.min(p.y + (Math.random() - 0.5) * 120 - 40 - size / 2, a.y + a.height - size));
-      win.setPosition(Math.round(nx), Math.round(ny));
+      lastRemindTarget = { x: Math.round(nx), y: Math.round(ny) };
+      win.setPosition(lastRemindTarget.x, lastRemindTarget.y);
     }
     // 清单变化（会话完成/过期退场）即使没有新事件也要通报，否则徽标和菜单会过期
     if (state !== lastAgent || isNewEvent || sesSig !== lastSesSig) {
@@ -349,7 +371,7 @@ function createWindow() {
   // 位置变化持久化（拖拽/走路/钳制都会触发，已防抖）
   win.on('move', saveSettings);
 
-  // 宠物走一步：窗口平移 {dx,dy}，撞到屏幕边缘则按轴回报反弹
+  // 宠物走一步：窗口平移 {dx,dy}，撞到屏幕边缘则钳回（目标点散步每帧重算方向，无需回报反弹）
   // 分量可能不足 1px（小体型拆细步），小数部分按轴累积进下一步，避免取整偏差
   let stepFracX = 0, stepFracY = 0;
   ipcMain.on('pet-step', (event, { dx, dy }) => {
@@ -360,14 +382,10 @@ function createWindow() {
     stepFracX += dx; stepFracY += dy;
     const mx = Math.trunc(stepFracX), my = Math.trunc(stepFracY);
     stepFracX -= mx; stepFracY -= my;
-    let nx = x + mx, ny = y + my;
-    let flipX = false, flipY = false;
-    if (nx <= area.x) { nx = area.x; flipX = true; }
-    if (nx >= area.x + area.width - size) { nx = area.x + area.width - size; flipX = true; }
-    if (ny <= area.y) { ny = area.y; flipY = true; }
-    if (ny >= area.y + area.height - size) { ny = area.y + area.height - size; flipY = true; }
-    win.setPosition(nx, ny);
-    event.reply('pet-step-done', { flipX, flipY });
+    win.setPosition(
+      Math.max(area.x, Math.min(x + mx, area.x + area.width - size)),
+      Math.max(area.y, Math.min(y + my, area.y + area.height - size))
+    );
   });
 
   // 拖拽开始：主进程记下窗口当前位置
@@ -404,6 +422,7 @@ function createWindow() {
     zoom: win ? win.webContents.getZoomFactor() : null,
     area: screen.getPrimaryDisplay().workArea,
     cursor: screen.getCursorScreenPoint(),
+    remindTarget: lastRemindTarget,
     trayBounds: tray ? tray.getBounds() : null
   }));
   // 调试用：测试时屏蔽用户鼠标干扰（窗口变点击穿透）

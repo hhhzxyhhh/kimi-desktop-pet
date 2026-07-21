@@ -136,7 +136,7 @@
 /* ---------- 浏览器兜底：直接双击 index.html 也能预览（只是不会满屏走） ---------- */
 if (!window.petAPI) {
   window.petAPI = {
-    step: () => {}, onStepDone: () => {}, dragStart: () => {}, dragTo: () => {}, resize: () => {},
+    step: () => {}, dragStart: () => {}, dragTo: () => {}, resize: () => {},
     openTerminal: () => {},
     onScale: () => {}, onCursor: () => {}, onMode: () => {}, onAgentState: () => {},
     onToggleSleep: () => {}, onToast: () => {}, onSuperRemind: () => {}, remindSuppress: () => {}
@@ -395,11 +395,6 @@ function startWalk() {
   }, 70); // 一个蹦跳周期(.42s)拆 6 小步
   walkStopTimer = setTimeout(() => toIdle(), 6000 + Math.random() * 6000);
 }
-
-petAPI.onStepDone(({ flipX, flipY }) => {
-  if (flipX) vx = -vx;
-  if (flipY) vy = -vy;
-});
 
 function startSleep() {
   clearTimers();

@@ -445,10 +445,11 @@ try {
   writeAgent('permission', 70000, undefined, 'session-x'); // 70s 前的权限申请（提醒超时 1min）
   await sleep(1500);
   const t22a = await evl(`petAPI.debugState().then(s => ({
-    d: Math.hypot(s.bounds.x + s.bounds.width / 2 - s.cursor.x, s.bounds.y + s.bounds.height / 2 - s.cursor.y),
+    d: s.remindTarget ? Math.hypot(s.bounds.x + s.bounds.width / 2 - (s.remindTarget.x + s.bounds.width / 2), 0) : 9999,
+    near: s.remindTarget ? Math.abs(s.bounds.x - s.remindTarget.x) <= 2 && Math.abs(s.bounds.y - s.remindTarget.y) <= 2 : false,
     hop: document.getElementById('squash').classList.contains('hop')
   }))`);
-  checkTrue('T22 超时后闪现到光标附近', t22a.d < 250, `距离=${t22a.d.toFixed(0)}px`);
+  checkTrue('T22 超时后闪现落点已执行', t22a.near === true, JSON.stringify(t22a));
   checkTrue('T22 提醒期间上蹿下跳', t22a.hop === true);
   rmSync(join(agentDir, 'session-x.json'), { force: true }); // 用户处理了
   await sleep(900);

@@ -2,10 +2,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('petAPI', {
-  // 宠物走一步（{dx,dy} 像素，可为小数），主进程移动窗口并按轴回报反弹
+  // 宠物走一步（{dx,dy} 像素，可为小数），主进程移动窗口并钳回屏幕内
   step: (d) => ipcRenderer.send('pet-step', d),
-  // 主进程回报这一步在 x/y 轴上是否撞边反弹
-  onStepDone: (cb) => ipcRenderer.on('pet-step-done', (_e, flips) => cb(flips)),
   // 拖拽开始：主进程记下窗口当前位置和尺寸
   dragStart: () => ipcRenderer.send('pet-drag-start'),
   // 拖拽中：鼠标在屏幕坐标系的绝对位移，主进程直接叠加
