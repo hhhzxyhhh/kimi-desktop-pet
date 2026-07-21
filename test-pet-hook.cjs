@@ -17,11 +17,12 @@ const runHook = (payload) =>
   execFileSync('node', [path.join(__dirname, 'pet-hook.cjs')], { input: JSON.stringify(payload), env });
 const readSes = (id) => JSON.parse(fs.readFileSync(path.join(dir, id + '.json'), 'utf8'));
 
-// T1: 普通工具事件 → working，项目名取自 cwd 末级
+// T1: 普通工具事件 → working，项目名取自 cwd 末级，pid 链已记录
 runHook({ hook_event_name: 'PreToolUse', tool_name: 'Bash', session_id: 's1', cwd: '/home/u/proj-a' });
 const t1 = readSes('s1');
 checkTrue('T1 调工具→working', t1.state === 'working', JSON.stringify(t1));
 checkTrue('T1 项目名写入', t1.proj === 'proj-a', t1.proj);
+checkTrue('T1 pid 链已记录且含父进程', Array.isArray(t1.pids) && t1.pids.length > 0 && t1.pids.every(Number.isInteger), JSON.stringify(t1.pids));
 
 // T2: session_id 特殊字符文件名转义；搜索工具 → searching
 runHook({ hook_event_name: 'PreToolUse', tool_name: 'WebSearch', session_id: 's/2: x', cwd: '/p' });

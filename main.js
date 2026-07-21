@@ -27,6 +27,12 @@ let dblAction = 'terminal'; // 双击动作：terminal 开 Kimi Code 终端 / we
 let remindMin = 0; // 超强提醒（分钟）：permission/ask 超时没人理就闪现到光标旁蹦跶；0=关
 // 坐标数值守卫：NaN 和 INT_MIN 之类的哨兵/溢出值都会让 setPosition/setBounds 抛异常
 const saneCoord = (v) => Number.isFinite(v) && Math.abs(v) < 100000;
+// 进程探活：kill(pid, 0)，ESRCH=死了，EPERM=活着但无权（也算活）
+function pidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try { process.kill(pid, 0); return true; }
+  catch (e) { return e.code === 'EPERM'; }
+}
 // setPosition 防弹衣：崩溃改成记日志（连同肇事值），异常对话框不再吓用户
 function safeSetPosition(tag, x, y) {
   try { win.setPosition(x, y); }
@@ -322,6 +328,12 @@ function createWindow() {
       let s = null;
       try { s = JSON.parse(fs.readFileSync(path.join(agentStateDir, f), 'utf8')); } catch {}
       if (!s || !Number.isFinite(s.ts)) continue;
+      // 进程探活：hook 记录的调用方 pid 链全灭 = CLI 已死，直接清场（不等 TTL）
+      if (Array.isArray(s.pids) && s.pids.length && !s.pids.some(pidAlive)) {
+        try { fs.rmSync(path.join(agentStateDir, f), { force: true }); } catch {}
+        lastEventTs.delete(id);
+        continue;
+      }
       if (effectiveState(s, now).stale) { // 死会话残留（关终端没发 SessionEnd），清掉
         try { fs.rmSync(path.join(agentStateDir, f), { force: true }); } catch {}
         lastEventTs.delete(id);

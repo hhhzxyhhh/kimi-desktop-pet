@@ -467,6 +467,17 @@ try {
   const t22d = await geomSettled();
   check('T22 提醒结束回到原位 x', t22d.x - t22pre.x, 0, 8);
   check('T22 提醒结束回到原位 y', t22d.y - t22pre.y, 0, 8);
+
+  // --- T23: 进程探活：pid 链全灭的会话直接清场，活着才显示 ---
+  await evl(`petAPI.debugResetAgent(); agentState = null; agentFaceSince = 0;`);
+  writeFileSync(join(agentDir, 'dead-ses.json'), JSON.stringify({ state: 'working', proj: 'dead', pids: [99999999], ts: Date.now() }));
+  writeFileSync(join(agentDir, 'live-ses.json'), JSON.stringify({ state: 'working', proj: 'live', pids: [1], ts: Date.now() })); // launchd 永远活着
+  await sleep(1200);
+  const t23a = await evl(`document.querySelectorAll('.ses-dot').length`);
+  checkTrue('T23 死 pid 会话被清，活 pid 会话留点', t23a === 1, `点数=${t23a}`);
+  writeFileSync(join(agentDir, 'live-ses.json'), JSON.stringify({ state: 'idle', pids: [1], ts: Date.now() }));
+  rmSync(join(agentDir, 'dead-ses.json'), { force: true });
+  rmSync(join(agentDir, 'live-ses.json'), { force: true });
 } finally {
   await evl(`petAPI.debugIgnoreMouse(false)`).catch(() => {});
 }
