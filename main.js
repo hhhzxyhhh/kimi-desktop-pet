@@ -241,12 +241,9 @@ function createWindow() {
     }
   });
 
-  // 置顶到屏保级，基本压得住普通窗口；所有工作区可见
+  // 置顶到屏保级，基本压得住普通窗口；所有工作区可见（含全屏 Space）
   win.setAlwaysOnTop(true, 'screen-saver');
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-
-  // macOS：不占用 Dock 图标，做个安静的小透明
-  if (app.dock) app.dock.hide();
 
   win.loadFile('index.html');
 
@@ -450,6 +447,8 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // macOS：先不占用 Dock 图标再做窗口——要压住全屏应用，agent 身份会影响 Space 归属
+  if (app.dock) app.dock.hide();
   ensureAgentHook(); // Kimi Code 联动：有则装，无则跳过，手动卸过尊重
   createWindow();
 
