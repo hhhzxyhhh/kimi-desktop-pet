@@ -122,8 +122,12 @@ function buildMenu() {
       ]
     },
     // 开机自启：状态以系统为准（登录项是 OS 存的）
-    { label: '开机自启', type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin,
-      click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }) },
+    {
+      label: '开机自启', submenu: [
+        { label: '开', type: 'radio', checked: app.getLoginItemSettings().openAtLogin, click: () => app.setLoginItemSettings({ openAtLogin: true }) },
+        { label: '关', type: 'radio', checked: !app.getLoginItemSettings().openAtLogin, click: () => app.setLoginItemSettings({ openAtLogin: false }) }
+      ]
+    },
     // 会话状态明细：每个活跃 Kimi Code 会话一行（项目名 + 状态），纯展示
     {
       label: `会话状态（${lastSessions.length}）`,
