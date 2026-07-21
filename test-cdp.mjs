@@ -491,8 +491,23 @@ try {
   const t23d = await evl(`document.querySelectorAll('.ses-dot').length`);
   checkTrue('T23 超 24h 保险丝清场', t23d === 0, `点数=${t23d}`);
   writeFileSync(join(agentDir, 'live-ses.json'), JSON.stringify({ state: 'idle', pids: [1], ts: Date.now() }));
-  rmSync(join(agentDir, 'dead-ses.json'), { force: true });
   rmSync(join(agentDir, 'live-ses.json'), { force: true });
+  rmSync(join(agentDir, 'dead-ses.json'), { force: true });
+  await sleep(600);
+  // --- T24: 点指示点 → 打开对应会话（带正确 id/cwd，且不触发戳） ---
+  writeFileSync(join(agentDir, 'ses-a.json'), JSON.stringify({ state: 'working', proj: 'proj-a', cwd: '/tmp/proj-a', pids: [1], ts: Date.now() }));
+  writeFileSync(join(agentDir, 'ses-b.json'), JSON.stringify({ state: 'idle', proj: 'proj-b', cwd: '/tmp/proj-b', pids: [1], ts: Date.now() }));
+  await sleep(1200);
+  await evl(`window.__os = null; window.__rawOS = openSessionTerm; openSessionTerm = (p) => { window.__os = p; };`);
+  await evl(`document.querySelectorAll('.ses-dot')[1].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}))`);
+  await evl(`document.querySelectorAll('.ses-dot')[1].dispatchEvent(new MouseEvent('click', {bubbles: true}))`);
+  await sleep(300);
+  const t24 = await evl(`({ os: window.__os, bubble: document.getElementById('bubble').classList.contains('show') })`);
+  checkTrue('T24 点第二颗点打开 ses-b', !!t24.os && t24.os.id === 'ses-b' && t24.os.cwd === '/tmp/proj-b', JSON.stringify(t24.os));
+  checkTrue('T24 点指示点不触发戳', t24.bubble === false);
+  await evl(`openSessionTerm = window.__rawOS;`);
+  rmSync(join(agentDir, 'ses-a.json'), { force: true });
+  rmSync(join(agentDir, 'ses-b.json'), { force: true });
 } finally {
   await evl(`petAPI.debugIgnoreMouse(false)`).catch(() => {});
 }

@@ -349,7 +349,7 @@ function createWindow() {
     const { state, ts } = aggregate(sessions, now);
     // 渲染层用的会话清单（指示点/完成播报/菜单明细）：所有活着的会话（含空闲），死会话已在上面的循环清掉
     const sesList = sessions
-      .map(s => ({ id: s.id, proj: s.proj || '', state: effectiveState(s, now).state }));
+      .map(s => ({ id: s.id, proj: s.proj || '', cwd: s.cwd || '', state: effectiveState(s, now).state }));
     const sesSig = JSON.stringify(sesList);
     lastSessions = sesList;
     // 超强提醒：有超时没人理的 permission/ask，就隔 ~1.2s 闪现到光标旁边
@@ -457,6 +457,20 @@ function createWindow() {
   ipcMain.on('pet-open-terminal', () => {
     if (dblAction === 'website') shell.openExternal('https://www.kimi.com');
     else openKimiTerminal();
+  });
+
+  // 点指示点：打开那个会话本身（Ghostty 里 kimi --session 恢复）
+  ipcMain.on('pet-open-session', (_e, { id, cwd }) => {
+    try {
+      if (process.platform !== 'darwin' || !fs.existsSync(GHOSTTY_APP)) return;
+      if (!/^[\w-]+$/.test(String(id || ''))) return; // session id 只允许安全字符
+      const cmd = cwd ? `cd ${JSON.stringify(cwd)} && kimi --session ${id}` : `kimi --session ${id}`;
+      spawn(path.join(GHOSTTY_APP, 'Contents', 'MacOS', 'ghostty'),
+        ['-e', process.env.SHELL || '/bin/zsh', '-lc', cmd],
+        { detached: true, stdio: 'ignore' }).unref();
+    } catch (e) {
+      console.log('[open-session] 打开失败:', e.message);
+    }
   });
 
   // 拖拽时抑制提醒闪现（渲染层通报）；提醒期间被拖过就不送回原位了

@@ -113,13 +113,13 @@
   }
 
   /* 多会话指示点：球脚下一排（Dock 式"运行中"指示），每个开着的会话窗口一颗 */
-  /* 绿=在干活，灰=空闲，红=出错/等你批准或回答 */
+  /* 绿=在干活，灰=空闲，红=出错/等你批准或回答；点哪颗就在终端里恢复那个会话 */
   .ses-dots {
     position: absolute; bottom: 2px; left: 50%;
     transform: translateX(-50%); transform-origin: 50% 100%;
     display: flex; gap: 6px; pointer-events: none;
   }
-  .ses-dot { width: 8px; height: 8px; border-radius: 50%; background: #4cd97b; box-shadow: 0 0 4px rgba(76,217,123,.8); }
+  .ses-dot { width: 8px; height: 8px; border-radius: 50%; background: #4cd97b; box-shadow: 0 0 4px rgba(76,217,123,.8); pointer-events: auto; cursor: pointer; }
   .ses-dot.gray { background: #9aa5b1; box-shadow: none; opacity: .7; }
   .ses-dot.red { background: #ff5252; box-shadow: 0 0 4px rgba(255,82,82,.8); }
 </style>
@@ -137,7 +137,7 @@
 if (!window.petAPI) {
   window.petAPI = {
     step: () => {}, dragStart: () => {}, dragTo: () => {}, resize: () => {},
-    openTerminal: () => {},
+    openTerminal: () => {}, openSession: () => {},
     onScale: () => {}, onCursor: () => {}, onMode: () => {}, onAgentState: () => {},
     onToggleSleep: () => {}, onToast: () => {}, onSuperRemind: () => {}, remindSuppress: () => {}
   };
@@ -327,7 +327,16 @@ function updateSessions(list) {
   if (sig !== lastDotSig) {
     lastDotSig = sig;
     const dotClass = (s) => ['permission', 'ask', 'error'].includes(s) ? ' red' : (s === 'idle' ? ' gray' : '');
-    sesDots.innerHTML = list.map(x => `<span class="ses-dot${dotClass(x.state)}"></span>`).join('');
+    const label = { working: '在忙', searching: '搜索中', thinking: '思考中', permission: '等你批准', ask: '问你问题', done: '刚搞定', error: '出错了', idle: '空闲' };
+    sesDots.innerHTML = '';
+    for (const x of list) {
+      const d = document.createElement('span');
+      d.className = 'ses-dot' + dotClass(x.state);
+      d.title = `${x.proj || x.id}（${label[x.state] || x.state}）：点开终端`;
+      d.addEventListener('pointerdown', e => e.stopPropagation()); // 别触发窗口拖拽/戳
+      d.addEventListener('click', e => { e.stopPropagation(); openSessionTerm({ id: x.id, cwd: x.cwd }); });
+      sesDots.appendChild(d);
+    }
   }
 }
 function applyAgentState(next) {
@@ -554,8 +563,9 @@ petAPI.onToast(p => {
   p.sticky ? saySticky(p.text) : say(p.text, 3000);
 });
 orb.addEventListener('dblclick', () => openKimiTerm()); // 双击开 Kimi Code 终端（说话走右键菜单）
-// 独立函数：测试时替换它来拦截双击（contextBridge 暴露的对象是冻结的，stub 不了）
+// 独立函数：测试时替换它来拦截点指示点（contextBridge 暴露的对象是冻结的，stub 不了）
 function openKimiTerm() { petAPI.openTerminal(); }
+function openSessionTerm(p) { petAPI.openSession(p); }
 
 /* ---------- 滚轮调节大小（拖拽整个窗口都行，但滚轮只认球体：周围辉光/阴影区滚的是下面的内容，别误触） ---------- */
 document.body.addEventListener('wheel', e => {

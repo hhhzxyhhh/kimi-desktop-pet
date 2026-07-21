@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('petAPI', {
   resize: (payload) => ipcRenderer.send('pet-resize', payload),
   // 双击：打开一个 Kimi Code 终端
   openTerminal: () => ipcRenderer.send('pet-open-terminal'),
+  // 点指示点：打开对应会话（Ghostty 里 kimi --session 恢复）
+  openSession: (payload) => ipcRenderer.send('pet-open-session', payload),
   // 主进程通报当前缩放倍数（气泡反向补偿用）
   onScale: (cb) => ipcRenderer.on('pet-scale', (_e, s) => cb(s)),
   // 主进程通报光标屏幕坐标（眼睛追踪用）

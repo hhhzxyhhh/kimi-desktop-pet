@@ -64,6 +64,6 @@ process.stdin.on('end', () => {
     // proj 带给渲染层：完成播报/会话菜单显示项目名（cwd 末级目录）
     // pids 带给主进程：调用方进程链探活（CLI 死了立刻清场）
     const proj = p.cwd ? path.basename(p.cwd) : '';
-    fs.writeFileSync(file, JSON.stringify({ state, tool, ev, proj, pids: ancestorPids(), ts: Date.now() }));
+    fs.writeFileSync(file, JSON.stringify({ state, tool, ev, proj, cwd: p.cwd || '', pids: ancestorPids(), ts: Date.now() }));
   } catch {}
 });
