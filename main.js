@@ -24,6 +24,8 @@ let scale = 1;     // 当前缩放倍数，实际窗口边长 = SIZE * scale
 let mode = 'kolo'; // 行为模式：stay 乖乖待着 / kolo 到处乱跑（kimi only live once）
 let dblAction = 'terminal'; // 双击动作：terminal 开 Kimi Code 终端 / website 开官网
 let remindMin = 0; // 超强提醒（分钟）：permission/ask 超时没人理就闪现到光标旁蹦跶；0=关
+// 坐标数值守卫：NaN 和 INT_MIN 之类的哨兵/溢出值都会让 setPosition/setBounds 抛异常
+const saneCoord = (v) => Number.isFinite(v) && Math.abs(v) < 100000;
 let lastSessions = []; // 最近一次聚合出的活跃会话清单（菜单"会话状态"用）
 // 会话状态的中文名（菜单明细用）
 const SESSION_LABEL = { working: '在忙', searching: '搜索中', thinking: '思考中', permission: '等你批准', ask: '问你问题', done: '刚搞定', error: '出错了', idle: '空闲' };
@@ -85,6 +87,7 @@ function setScale(s, fx = 0.5, fy = 0.5) {
   scale = s;
   const size = Math.round(SIZE * s);
   let [x, y] = win.getPosition();
+  if (!saneCoord(x) || !saneCoord(y)) return; // 显示器热插拔重配置时读数可能是 NaN/哨兵值
   x += fx * (oldSize - size);
   y += fy * (oldSize - size);
   // 多屏：钳进窗口中心最近的显示器工作区
@@ -382,8 +385,9 @@ function createWindow() {
   // 分量可能不足 1px（小体型拆细步），小数部分按轴累积进下一步，避免取整偏差
   let stepFracX = 0, stepFracY = 0;
   ipcMain.on('pet-step', (event, { dx, dy, tx, ty }) => {
-    if (!win || !Number.isFinite(dx) || !Number.isFinite(dy)) return;
+    if (!win || !saneCoord(dx) || !saneCoord(dy)) return;
     const [x, y] = win.getPosition();
+    if (!saneCoord(x) || !saneCoord(y)) return; // 显示器热插拔重配置时读数可能是 NaN/哨兵值
     const size = win.getSize()[0];
     const areas = screen.getAllDisplays().map(d => d.workArea);
     stepFracX += dx; stepFracY += dy;
@@ -413,9 +417,8 @@ function createWindow() {
   // 拖拽：dx/dy 是鼠标在屏幕坐标系的绝对位移，直接叠加到按下时的窗口位置。
   // 不能用 clientX：它相对窗口，窗口一动就产生反馈（实测只跟得上一半）
   ipcMain.on('pet-drag', (event, { dx, dy }) => {
-    // 防御 NaN/undefined：非鼠标指针事件可能不带屏幕坐标，窗口位置读数异常时 origin 也可能是 NaN
-    if (!win || !dragOrigin || !Number.isFinite(dx) || !Number.isFinite(dy) ||
-        !Number.isFinite(dragOrigin.x) || !Number.isFinite(dragOrigin.y)) return;
+    if (!win || !dragOrigin || !saneCoord(dx) || !saneCoord(dy) ||
+        !saneCoord(dragOrigin.x) || !saneCoord(dragOrigin.y)) return;
     win.setPosition(Math.round(dragOrigin.x + dx), Math.round(dragOrigin.y + dy));
   });
 
