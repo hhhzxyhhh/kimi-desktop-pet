@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld('petAPI', {
   debugIgnoreMouse: (flag) => ipcRenderer.invoke('pet-debug-ignore-mouse', flag),
   // 调试用：重置 agent 状态跟踪
   debugResetAgent: () => ipcRenderer.invoke('pet-debug-reset-agent'),
+  // 调试用：切换某会话的忽略状态
+  debugIgnoreSession: (id) => ipcRenderer.invoke('pet-debug-ignore-session', id),
   // 右键菜单事件
   onToggleSleep: (cb) => ipcRenderer.on('toggle-sleep', () => cb()),
   // 主进程气泡通报（装终端进度等；sticky 时气泡常驻等用户点掉）

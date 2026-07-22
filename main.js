@@ -54,7 +54,7 @@ function saveSettings() {
     if (!win) return;
     const [x, y] = win.getPosition();
     // 合并保留其他键（如 agentLinkInstalled），不整个覆盖
-    fs.writeFile(settingsFile(), JSON.stringify({ ...loadSettings(), scale, x, y, mode, dblclick: dblAction, remindMin }), () => {});
+    fs.writeFile(settingsFile(), JSON.stringify({ ...loadSettings(), scale, x, y, mode, dblclick: dblAction, remindMin, ignoredSessions: [...ignoredSessions] }), () => {});
   }, 400);
 }
 
@@ -86,6 +86,14 @@ function setDblAction(a) {
 // 切换超强提醒超时（分钟，0=关）
 function setRemindMin(m) {
   remindMin = m;
+  saveSettings();
+}
+
+// 按会话忽略监控：忽略的会话不出点、不参与聚合/提醒；只隐藏，不影响会话本身
+let ignoredSessions = new Set();
+function toggleIgnoreSession(id) {
+  if (!id) return;
+  ignoredSessions.has(id) ? ignoredSessions.delete(id) : ignoredSessions.add(id);
   saveSettings();
 }
 
@@ -143,14 +151,21 @@ function buildMenu() {
         { label: '关', type: 'radio', checked: !app.getLoginItemSettings().openAtLogin, click: () => app.setLoginItemSettings({ openAtLogin: false }) }
       ]
     },
-    // 会话状态明细：每个活跃 Kimi Code 会话一行（项目名 + 状态），纯展示；同项目多窗带 id 后缀区分
+    // 会话状态明细：行=打开对应终端；子菜单第二层忽略/恢复监控（防误触）；同项目多窗带 id 后缀区分
     {
       label: `会话状态（${lastSessions.length}）`,
       submenu: lastSessions.length
         ? lastSessions.map(x => {
             const dup = lastSessions.filter(y => y.proj && y.proj === x.proj).length > 1;
+            const ignored = ignoredSessions.has(x.id);
             const name = `「${x.proj || x.id}${dup ? ' ·' + x.id.slice(-4) : ''}」`;
-            return { label: `${name}${SESSION_LABEL[x.state] || x.state}`, enabled: false };
+            return {
+              label: `${name}${SESSION_LABEL[x.state] || x.state}${ignored ? '（已忽略）' : ''}`,
+              submenu: [
+                { label: '打开终端', click: () => openSessionTerminal(x.id, x.cwd) },
+                { label: ignored ? '恢复监控' : '忽略监控', click: () => toggleIgnoreSession(x.id) }
+              ]
+            };
           })
         : [{ label: '（没有活跃会话）', enabled: false }]
     },
@@ -178,6 +193,27 @@ function openKimiTerminal() {
     }
   } catch (e) {
     console.log('[terminal] 打开终端失败:', e.message);
+  }
+}
+
+// 打开指定会话的终端（Ghostty 里 kimi --session 恢复）
+function openSessionTerminal(id, cwd) {
+  try {
+    if (!/^[\w-]+$/.test(String(id || ''))) return; // session id 只允许安全字符
+    // shell 安全引号（单引号包裹 + 内部单引号转义），防目录名注入；Ghostty 不吃 spawn 的 cwd，必须 cd
+    const q = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
+    if (process.platform === 'darwin') {
+      if (!fs.existsSync(GHOSTTY_APP)) return;
+      const cmd = cwd ? `cd ${q(cwd)} && kimi --session ${id}` : `kimi --session ${id}`;
+      spawn(path.join(GHOSTTY_APP, 'Contents', 'MacOS', 'ghostty'),
+        ['-e', process.env.SHELL || '/bin/zsh', '-lc', cmd],
+        { detached: true, stdio: 'ignore' }).unref();
+    } else if (process.platform === 'win32') {
+      const cmd = cwd ? `cd /d "${String(cwd).replace(/"/g, '""')}" & kimi --session ${id}` : `kimi --session ${id}`;
+      spawn('cmd', ['/c', 'start', 'cmd', '/k', cmd], { detached: true, stdio: 'ignore' }).unref();
+    }
+  } catch (e) {
+    console.log('[open-session] 打开失败:', e.message);
   }
 }
 
@@ -231,6 +267,7 @@ function createWindow() {
   remindMin = process.env.KIMI_PET_REMIND_MIN !== undefined
     ? (Number(process.env.KIMI_PET_REMIND_MIN) || 0)
     : ([1, 5, 10].includes(st.remindMin) ? st.remindMin : 0);
+  ignoredSessions = new Set(Array.isArray(st.ignoredSessions) ? st.ignoredSessions : []);
   const size0 = Math.round(SIZE * scale);
   const onScreen = (x, y) => screen.getAllDisplays().some(d => {
     const a = d.workArea;
@@ -346,14 +383,14 @@ function createWindow() {
       if (lastEventTs.get(id) !== s.ts) { lastEventTs.set(id, s.ts); isNewEvent = true; }
       sessions.push({ ...s, id });
     }
-    const { state, ts } = aggregate(sessions, now);
-    // 渲染层用的会话清单（指示点/完成播报/菜单明细）：所有活着的会话（含空闲），死会话已在上面的循环清掉
-    const sesList = sessions
+    const { state, ts } = aggregate(sessions.filter(s => !ignoredSessions.has(s.id)), now);
+    // 渲染层用的会话清单（指示点/完成播报）：不含被忽略的；菜单明细用全量（忽略标记可见，可恢复）
+    lastSessions = sessions
       .map(s => ({ id: s.id, proj: s.proj || '', cwd: s.cwd || '', state: effectiveState(s, now).state }));
-    const sesSig = JSON.stringify(sesList);
-    lastSessions = sesList;
-    // 超强提醒：有超时没人理的 permission/ask，就隔 ~1.2s 闪现到光标旁边
-    const remind = remindMin > 0 && needsReminder(sessions, now, remindMin * 60000);
+    const sesList = lastSessions.filter(x => !ignoredSessions.has(x.id));
+    const sesSig = JSON.stringify(sesList) + JSON.stringify([...ignoredSessions]);
+    // 超强提醒：有超时没人理的 permission/ask（不含被忽略的），就隔 ~1.2s 闪现到光标旁边
+    const remind = remindMin > 0 && needsReminder(sessions.filter(s => !ignoredSessions.has(s.id)), now, remindMin * 60000);
     if (remind !== reminding) {
       reminding = remind;
       if (reminding) {
@@ -460,25 +497,7 @@ function createWindow() {
   });
 
   // 点指示点：打开那个会话本身（终端里 kimi --session 恢复）
-  ipcMain.on('pet-open-session', (_e, { id, cwd }) => {
-    try {
-      if (!/^[\w-]+$/.test(String(id || ''))) return; // session id 只允许安全字符
-      // shell 安全引号（单引号包裹 + 内部单引号转义），防目录名注入；Ghostty 不吃 spawn 的 cwd，必须 cd
-      const q = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
-      if (process.platform === 'darwin') {
-        if (!fs.existsSync(GHOSTTY_APP)) return;
-        const cmd = cwd ? `cd ${q(cwd)} && kimi --session ${id}` : `kimi --session ${id}`;
-        spawn(path.join(GHOSTTY_APP, 'Contents', 'MacOS', 'ghostty'),
-          ['-e', process.env.SHELL || '/bin/zsh', '-lc', cmd],
-          { detached: true, stdio: 'ignore' }).unref();
-      } else if (process.platform === 'win32') {
-        const cmd = cwd ? `cd /d "${String(cwd).replace(/"/g, '""')}" & kimi --session ${id}` : `kimi --session ${id}`;
-        spawn('cmd', ['/c', 'start', 'cmd', '/k', cmd], { detached: true, stdio: 'ignore' }).unref();
-      }
-    } catch (e) {
-      console.log('[open-session] 打开失败:', e.message);
-    }
-  });
+  ipcMain.on('pet-open-session', (_e, { id, cwd }) => openSessionTerminal(id, cwd));
 
   // 拖拽时抑制提醒闪现（渲染层通报）；提醒期间被拖过就不送回原位了
   ipcMain.on('pet-remind-suppress', (_e, f) => {
@@ -504,6 +523,8 @@ function createWindow() {
   });
   // 调试用：重置 agent 状态跟踪（长测试套件里让用例互不污染）
   ipcMain.handle('pet-debug-reset-agent', () => { lastAgent = 'idle'; lastSesSig = '[]'; lastEventTs.clear(); });
+  // 调试用：切换某会话的忽略状态（忽略/恢复监控）
+  ipcMain.handle('pet-debug-ignore-session', (_e, id) => toggleIgnoreSession(id));
 }
 
 app.whenReady().then(() => {
@@ -548,5 +569,5 @@ app.on('before-quit', () => {
   clearTimeout(saveTimer);
   if (!win) return;
   const [x, y] = win.getPosition();
-  try { fs.writeFileSync(settingsFile(), JSON.stringify({ ...loadSettings(), scale, x, y, mode, dblclick: dblAction, remindMin })); } catch {}
+  try { fs.writeFileSync(settingsFile(), JSON.stringify({ ...loadSettings(), scale, x, y, mode, dblclick: dblAction, remindMin, ignoredSessions: [...ignoredSessions] })); } catch {}
 });

@@ -506,6 +506,20 @@ try {
   checkTrue('T24 点第二颗点打开 ses-b', !!t24.os && t24.os.id === 'ses-b' && t24.os.cwd === '/tmp/proj-b', JSON.stringify(t24.os));
   checkTrue('T24 点指示点不触发戳', t24.bubble === false);
   await evl(`openSessionTerm = window.__rawOS;`);
+  // --- T25: 忽略监控：忽略的会话不出点不参与聚合，恢复后回来 ---
+  writeFileSync(join(agentDir, 'ses-a.json'), JSON.stringify({ state: 'working', proj: 'proj-a', pids: [1], ts: Date.now() }));
+  writeFileSync(join(agentDir, 'ses-b.json'), JSON.stringify({ state: 'idle', proj: 'proj-b', pids: [1], ts: Date.now() }));
+  await sleep(1200);
+  const t25a = await evl(`document.querySelectorAll('.ses-dot').length`);
+  checkTrue('T25 忽略前两颗点', t25a === 2, `点数=${t25a}`);
+  await evl(`petAPI.debugIgnoreSession('ses-a')`);
+  await sleep(1200);
+  const t25b = await evl(`document.querySelectorAll('.ses-dot').length`);
+  checkTrue('T25 忽略 ses-a 后只剩 ses-b', t25b === 1, `点数=${t25b}`);
+  await evl(`petAPI.debugIgnoreSession('ses-a')`);
+  await sleep(1200);
+  const t25c = await evl(`document.querySelectorAll('.ses-dot').length`);
+  checkTrue('T25 恢复后回到两颗', t25c === 2, `点数=${t25c}`);
   rmSync(join(agentDir, 'ses-a.json'), { force: true });
   rmSync(join(agentDir, 'ses-b.json'), { force: true });
 } finally {
