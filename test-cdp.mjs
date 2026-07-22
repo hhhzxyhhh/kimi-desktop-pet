@@ -440,6 +440,8 @@ try {
   await evl(`clearTimers(); state = 'idle'; squash.classList.remove('poked');`);
 
   // --- T19: 睡觉中被强制拉去走路，睡颜类必须摘掉（不许一边睡一边蹦） ---
+  // 先清干净 agent 队列：前面 thinking 队列可能延迟到本用例触发唤醒，抖掉睡颜
+  await evl(`clearTimers(); clearTimeout(agentQueueTimer); agentState = null; startSleep();`);
   await sleep(100);
   const t19a = await evl(`document.getElementById('orb').classList.contains('sleeping')`);
   checkTrue('T19 入睡后睡颜在', t19a === true);
