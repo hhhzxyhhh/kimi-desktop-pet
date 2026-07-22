@@ -112,7 +112,12 @@ function setScale(s, fx = 0.5, fy = 0.5) {
   y += fy * (oldSize - size);
   // 多屏：钳进窗口中心最近的显示器工作区
   const c = clampWindow(screen.getAllDisplays().map(d => d.workArea), x, y, size);
-  win.setBounds({ x: Math.round(c.x), y: Math.round(c.y), width: size, height: size });
+  try {
+    win.setBounds({ x: Math.round(c.x), y: Math.round(c.y), width: size, height: size });
+  } catch (e) {
+    console.log('[setScale] 拒绝执行:', e.message); // 显示器重配置时 workArea 可能是坏值
+    return;
+  }
   win.webContents.setZoomFactor(s);
   win.webContents.send('pet-scale', s);
   saveSettings();
@@ -298,7 +303,7 @@ function createWindow() {
     }
   });
 
-  // 置顶到屏保级，基本压得住普通窗口；所有工作区可见（含全屏 Space）
+  // 置顶到屏保级（mac-window 还会再抬到 1500），基本压得住普通窗口；所有工作区可见（含全屏 Space）
   // skipTransformProcessType：配合 dock.hide，避免切 Space 时窗口被短暂隐藏（学 Clawd）
   win.setAlwaysOnTop(true, 'screen-saver');
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
