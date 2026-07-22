@@ -379,10 +379,11 @@ function createWindow() {
         lastEventTs.delete(id);
         continue;
       }
-      if (lastEventTs.get(id) !== s.ts) {
+      const seenTs = lastEventTs.get(id);
+      if (seenTs !== s.ts) {
         lastEventTs.set(id, s.ts); isNewEvent = true;
-        // 被忽略的会话有新事件 = 又开始活动了，自动移出忽略名单
-        if (ignoredSessions.delete(id)) saveSettings();
+        // 被忽略的会话有"观察期间的新事件"才算又开始活动（启动时第一次见到不算，防重启全员恢复）
+        if (seenTs !== undefined && ignoredSessions.delete(id)) saveSettings();
       }
       sessions.push({ ...s, id });
     }

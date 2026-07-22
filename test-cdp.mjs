@@ -534,6 +534,13 @@ try {
   await sleep(1200);
   const t25c = await evl(`document.querySelectorAll('.ses-dot').length`);
   checkTrue('T25 ses-a 活动后自动恢复', t25c === 2, `点数=${t25c}`);
+  // 重启（清空事件跟踪）后：已忽略的会话不该被"第一次见到"误判成新活动而自动恢复
+  await evl(`petAPI.debugIgnoreSession('ses-a')`);
+  await sleep(1200);
+  await evl(`petAPI.debugResetAgent()`); // 等价于重启：lastEventTs 清空
+  await sleep(1200);
+  const t25d = await evl(`document.querySelectorAll('.ses-dot').length`);
+  checkTrue('T25 重启后忽略保持（不被误判新活动）', t25d === 1, `点数=${t25d}`);
   rmSync(join(agentDir, 'ses-a.json'), { force: true });
   rmSync(join(agentDir, 'ses-b.json'), { force: true });
 } finally {
