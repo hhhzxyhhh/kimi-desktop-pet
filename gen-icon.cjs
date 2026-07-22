@@ -21,13 +21,15 @@ app.whenReady().then(async () => {
     `document.querySelector('#squash svg').outerHTML`
   );
 
-  // 干净页面：只有 SVG，无滤镜无动画，按 512 CSS px 精确渲染
+  // 干净页面：只有 SVG，无滤镜无动画。macOS 图标惯例：图形约占 70%，四周留透明边距，
+  // 不然顶满 squircle 会显得比别的图标大一圈
   // 注意：表情/汗珠的显隐规则在 index.html 的 <style> 里，这里要补一份，只留默认眼
   const html = `<!DOCTYPE html><html><head><style>
     body{margin:0;background:transparent}
-    .expr,.sweat{display:none} .expr-default{display:block}
+    .expr,.sweat,.acc,.bang{display:none} .expr-default{display:block}
+    svg{position:absolute;left:76px;top:76px}
   </style></head><body>${
-    svg.replace('<svg ', '<svg width="512" height="512" ')
+    svg.replace('<svg ', '<svg width="360" height="360" ')
   }</body></html>`;
   await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
   await new Promise(r => setTimeout(r, 300));
