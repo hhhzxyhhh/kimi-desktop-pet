@@ -432,6 +432,11 @@ function createWindow() {
       lastAgent = state;
       lastSesSig = sesSig;
       win.webContents.send('agent-state', { state, ts, sessions: sesList });
+      // 托盘 tooltip 顺带显示会话概况
+      if (tray) {
+        const active = sesList.filter(x => x.state !== 'idle').length;
+        tray.setToolTip(`Kimi 桌宠${sesList.length ? ` · ${sesList.length} 个会话${active ? `（${active} 个在忙）` : ''}` : ''}`);
+      }
     }
   }, 500);
 

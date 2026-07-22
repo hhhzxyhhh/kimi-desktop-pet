@@ -427,8 +427,17 @@ try {
   checkTrue('T14 散步明显位移', moved > 10, `位移=${moved.toFixed(1)}`);
   checkTrue('T14 朝右下目标移动', w1.x > w0.x && w1.y >= w0.y, `dx=${(w1.x - w0.x).toFixed(1)} dy=${(w1.y - w0.y).toFixed(1)}`);
 
+  // --- T26: 散步中可戳（戳一下拦停散步并正常挨戳） ---
+  await evl(`{ window.__r = Math.random; Math.random = () => 0.9; startWalk(); Math.random = window.__r; }`);
+  await sleep(200);
+  await evl(`poke()`);
+  await sleep(200);
+  const t26 = await evl(`({ state, bubble: document.getElementById('bubble').classList.contains('show') })`);
+  checkTrue('T26 散步中戳后回到 idle', t26.state === 'idle', JSON.stringify(t26));
+  checkTrue('T26 戳触发了气泡', t26.bubble === true);
+  await evl(`clearTimers(); state = 'idle'; squash.classList.remove('poked');`);
+
   // --- T19: 睡觉中被强制拉去走路，睡颜类必须摘掉（不许一边睡一边蹦） ---
-  await evl(`clearTimers(); startSleep();`);
   await sleep(100);
   const t19a = await evl(`document.getElementById('orb').classList.contains('sleeping')`);
   checkTrue('T19 入睡后睡颜在', t19a === true);

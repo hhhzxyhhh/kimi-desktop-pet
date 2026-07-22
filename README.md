@@ -29,14 +29,7 @@
 
 > **依赖提醒**：双击开终端、点指示点恢复会话这些功能依赖 **[Ghostty](https://ghostty.org)** 终端（macOS，顺便说它确实好用，推荐）。没装也没关系——首次双击会自动通过 Homebrew 帮你装；没有 Homebrew 会弹出终端引导你装（输一次密码后全自动）。Windows 用系统 cmd 即可，不需要 Ghostty。
 
-**方式一：下载打包好的应用（零命令，推荐）**
-
-到 [Actions](../../../actions) 页面点最新一次成功的构建，在底部 Artifacts 下载（需登录 GitHub）：
-
-- `kimi-desktop-pet-macos-latest`：macOS 的 .app / .dmg，首次打开在 Finder 里**右键 → 打开 → 打开**
-- `kimi-desktop-pet-windows-latest`：Windows 便携 exe，首次运行 SmartScreen 选**"更多信息 → 仍要运行"**
-
-**方式二：源码运行**
+**克隆即用（推荐）**
 
 需要 Node.js ≥ 18（终端里 `node -v` 检查；没有的话到 [nodejs.org](https://nodejs.org) 装 LTS 版）：
 
@@ -47,8 +40,14 @@ npm install
 npm start
 ```
 
+就这四行，球就上桌了。没有签名/公证那些破事，macOS 不会拦。
+
 > 只想快速看一眼长什么样？直接双击 `index.html` 用浏览器打开也行——
 > 动画都在，只是没有桌面窗口，它不会满屏走。
+
+**方式二：下载打包好的应用（可选）**
+
+到 [Actions](../../../actions) 页面点最新一次成功的构建，在底部 Artifacts 下载（需登录 GitHub）。应用未签名，macOS 首次打开要在 Finder 里**右键 → 打开 → 打开**（Windows 首次运行 SmartScreen 选**"更多信息 → 仍要运行"**），嫌麻烦就用上面的克隆方式。
 
 ## 操作一览
 

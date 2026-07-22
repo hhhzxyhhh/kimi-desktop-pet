@@ -467,6 +467,7 @@ let poking = false;
 function poke() {
   if (poking) return;
   if (state === 'sleep') { wake(true); return; }
+  if (state === 'walk') toIdle(); // 散步中也能戳：先拦停再挨戳（不然满屏跑时戳了没反应）
   if (state !== 'idle') return;
   poking = true;
   squash.classList.remove('poked');
