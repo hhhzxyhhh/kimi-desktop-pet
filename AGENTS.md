@@ -16,6 +16,8 @@ node_modules/.bin/electron . --remote-debugging-port=9223 &
 node test-cdp.mjs   # CDP 行为回归（需要上一条的实例在跑）
 ```
 
+CI 里单测和 CDP 都跑（macOS + Windows 双 runner 真 GUI），push 即拦。
+
 ## 约定
 
 - 主进程 `main.js` 单实例运行；测试实例必须带 `KIMI_PET_ALLOW_MULTI=1` 和独立 `KIMI_PET_STATE_DIR`
