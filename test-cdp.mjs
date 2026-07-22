@@ -82,11 +82,13 @@ try {
   await evl(`clearTimers(); state = 'drag'; mode = 'stay';`);
   await sleep(300);
 
-  // --- 归位到右下角：多屏机器上 settings 可能把窗口恢复到外屏，后续断言按主屏几何算；
-  // 别停屏幕中央——用户还要干活（角落里不碍事，且远离台前调度左侧保留区） ---
+  // --- 归位到工作区右下角：多屏机器上 settings 可能把窗口恢复到外屏，后续断言按窗口所在屏几何算；
+  // 目标点按实际工作区动态算（CI runner 分辨率小，写死坐标会装不下） ---
   const bp = await geom();
+  const parkX = Math.max(bp.area.x + 40, bp.area.x + bp.area.width - 320);
+  const parkY = Math.max(bp.area.y + 40, bp.area.y + bp.area.height - 200);
   await evl(`petAPI.dragStart();`);
-  await evl(`petAPI.dragTo({ dx: ${1200} - (${bp.x}), dy: ${650} - (${bp.y}) })`);
+  await evl(`petAPI.dragTo({ dx: ${parkX - bp.x}, dy: ${parkY - bp.y} })`);
   await sleep(300);
 
   // --- T0a: 启动即同步缩放（持久化恢复到非 1 时，渲染层 curScale 必须跟上，否则气泡补偿错） ---

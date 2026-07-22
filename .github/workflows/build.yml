@@ -21,6 +21,18 @@ jobs:
       - run: npm ci
       - name: 单元测试（纯 Node，Windows runner 上即真 Windows 环境）
         run: npm test
+      - name: CDP 行为回归（带窗口跑，macOS/Windows 真 GUI）
+        shell: bash
+        run: |
+          export KIMI_PET_ALLOW_MULTI=1 KIMI_PET_REMIND_MIN=1
+          export KIMI_PET_STATE_DIR="$(node -e 'console.log(require("os").tmpdir() + "/pet-test-agent-state")')"
+          node_modules/.bin/electron . --remote-debugging-port=9223 &
+          EPID=$!
+          sleep 5
+          node test-cdp.mjs
+          RC=$?
+          kill $EPID 2>/dev/null || true
+          exit $RC
       - name: 打包
         shell: bash
         run: |
