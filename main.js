@@ -200,11 +200,35 @@ function openKimiTerminal() {
   }
 }
 
+// 这个会话的终端是否已经开着：
+// 1) --session id 启动的按参数匹配；2) 裸 kimi 进程按工作目录匹配（lsof 取进程 cwd）
+// 注意用 ps 而不是 pgrep：macOS 上 pgrep 对运行久、环境大的进程读不到参数会漏判
+function sessionCliAlive(id, cwd) {
+  try {
+    const args = execSync('ps -eo args', { timeout: 2000 }).toString();
+    if (args.includes(`kimi --session ${id}`)) return true;
+  } catch {}
+  if (cwd) {
+    try {
+      const pids = execSync(`ps -eo pid,comm | awk '$2=="kimi"{print $1}'`, { timeout: 2000 })
+        .toString().trim().split('\n').filter(Boolean);
+      for (const pid of pids) {
+        try {
+          const lsof = execSync(`lsof -a -p ${pid} -d cwd -Fn`, { timeout: 1000 }).toString();
+          const m = lsof.match(/^n(.+)$/m);
+          if (m && m[1] === cwd) return true;
+        } catch {}
+      }
+    } catch {}
+  }
+  return false;
+}
+
 // 打开指定会话的终端（Ghostty 里 kimi --session 恢复）；已开着的会话只唤前台不重复开
 function openSessionTerminal(id, cwd) {
   try {
     if (!/^[\w-]+$/.test(String(id || ''))) return; // session id 只允许安全字符
-    if (sessionCliAlive(id)) {
+    if (sessionCliAlive(id, cwd)) {
       // 已有终端在跑这个会话：只把终端应用唤到前台（open -a 激活已有实例，不开新窗）
       spawn('open', ['-a', 'Ghostty.app'], { detached: true, stdio: 'ignore' }).unref();
       return;
@@ -224,14 +248,6 @@ function openSessionTerminal(id, cwd) {
   } catch (e) {
     console.log('[open-session] 打开失败:', e.message);
   }
-}
-
-// 这个会话的 kimi CLI 是否已经在某个终端里活着（按进程参数匹配，session id 已校验安全字符）
-function sessionCliAlive(id) {
-  try {
-    execSync(`pgrep -f "kimi --session ${id}"`, { timeout: 1500, stdio: 'ignore' });
-    return true;
-  } catch { return false; }
 }
 
 // 没装 Ghostty：有 Homebrew 就自动装（装完自动开）；没 brew 就开可见终端引导装（需输一次密码）
