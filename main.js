@@ -151,19 +151,18 @@ function buildMenu() {
         { label: '关', type: 'radio', checked: !app.getLoginItemSettings().openAtLogin, click: () => app.setLoginItemSettings({ openAtLogin: false }) }
       ]
     },
-    // 会话状态明细：行=打开对应终端；子菜单第二层忽略/恢复监控（防误触）；同项目多窗带 id 后缀区分
+    // 会话状态明细：行=打开对应终端；子菜单第二层忽略监控（防误触；忽略即隐身，有活动自动回来）；同项目多窗带 id 后缀区分
     {
       label: `会话状态（${lastSessions.length}）`,
       submenu: lastSessions.length
         ? lastSessions.map(x => {
             const dup = lastSessions.filter(y => y.proj && y.proj === x.proj).length > 1;
-            const ignored = ignoredSessions.has(x.id);
             const name = `「${x.proj || x.id}${dup ? ' ·' + x.id.slice(-4) : ''}」`;
             return {
-              label: `${name}${SESSION_LABEL[x.state] || x.state}${ignored ? '（已忽略）' : ''}`,
+              label: `${name}${SESSION_LABEL[x.state] || x.state}`,
               submenu: [
                 { label: '打开终端', click: () => openSessionTerminal(x.id, x.cwd) },
-                { label: ignored ? '恢复监控' : '忽略监控', click: () => toggleIgnoreSession(x.id) }
+                { label: '忽略监控', click: () => toggleIgnoreSession(x.id) }
               ]
             };
           })
@@ -380,14 +379,19 @@ function createWindow() {
         lastEventTs.delete(id);
         continue;
       }
-      if (lastEventTs.get(id) !== s.ts) { lastEventTs.set(id, s.ts); isNewEvent = true; }
+      if (lastEventTs.get(id) !== s.ts) {
+        lastEventTs.set(id, s.ts); isNewEvent = true;
+        // 被忽略的会话有新事件 = 又开始活动了，自动移出忽略名单
+        if (ignoredSessions.delete(id)) saveSettings();
+      }
       sessions.push({ ...s, id });
     }
     const { state, ts } = aggregate(sessions.filter(s => !ignoredSessions.has(s.id)), now);
-    // 渲染层用的会话清单（指示点/完成播报）：不含被忽略的；菜单明细用全量（忽略标记可见，可恢复）
-    lastSessions = sessions
-      .map(s => ({ id: s.id, proj: s.proj || '', cwd: s.cwd || '', state: effectiveState(s, now).state }));
-    const sesList = lastSessions.filter(x => !ignoredSessions.has(x.id));
+    // 渲染层点清单与菜单明细同一份：都不含被忽略的（忽略即隐身，有活动自动回来）
+    const sesList = sessions
+      .map(s => ({ id: s.id, proj: s.proj || '', cwd: s.cwd || '', state: effectiveState(s, now).state }))
+      .filter(x => !ignoredSessions.has(x.id));
+    lastSessions = sesList;
     const sesSig = JSON.stringify(sesList) + JSON.stringify([...ignoredSessions]);
     // 超强提醒：有超时没人理的 permission/ask（不含被忽略的），就隔 ~1.2s 闪现到光标旁边
     const remind = remindMin > 0 && needsReminder(sessions.filter(s => !ignoredSessions.has(s.id)), now, remindMin * 60000);
