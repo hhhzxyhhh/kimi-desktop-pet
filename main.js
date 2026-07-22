@@ -200,13 +200,14 @@ function openKimiTerminal() {
   }
 }
 
-// 这个会话的终端是否已经开着：
+// 这个会话的终端是否已经开着：返回匹配的 kimi 进程 pid，没有返回 null
 // 1) --session id 启动的按参数匹配；2) 裸 kimi 进程按工作目录匹配（lsof 取进程 cwd）
 // 注意用 ps 而不是 pgrep：macOS 上 pgrep 对运行久、环境大的进程读不到参数会漏判
-function sessionCliAlive(id, cwd) {
+function findSessionPid(id, cwd) {
   try {
-    const args = execSync('ps -eo args', { timeout: 2000 }).toString();
-    if (args.includes(`kimi --session ${id}`)) return true;
+    const args = execSync('ps -eo pid,args', { timeout: 2000 }).toString();
+    const m = args.match(new RegExp(`^\\s*(\\d+)\\s+kimi --session ${id}\\b`, 'm'));
+    if (m) return Number(m[1]);
   } catch {}
   if (cwd) {
     try {
@@ -216,21 +217,36 @@ function sessionCliAlive(id, cwd) {
         try {
           const lsof = execSync(`lsof -a -p ${pid} -d cwd -Fn`, { timeout: 1000 }).toString();
           const m = lsof.match(/^n(.+)$/m);
-          if (m && m[1] === cwd) return true;
+          if (m && m[1] === cwd) return Number(pid);
         } catch {}
       }
     } catch {}
   }
-  return false;
+  return null;
+}
+
+// 顺父链找宿主终端应用（kimi → shell → 终端 App），找不到就默认 Ghostty
+function hostTerminalApp(pid) {
+  const APPS = { ghostty: 'Ghostty', Terminal: 'Terminal', iTerm2: 'iTerm', WezTerm: 'WezTerm', kitty: 'kitty', Alacritty: 'Alacritty', Warp: 'Warp' };
+  try {
+    let cur = pid;
+    for (let i = 0; i < 8 && cur > 1; i++) {
+      const comm = execSync(`ps -o comm= -p ${cur}`, { timeout: 1000 }).toString().trim().split('/').pop();
+      if (APPS[comm]) return APPS[comm];
+      cur = parseInt(execSync(`ps -o ppid= -p ${cur}`, { timeout: 1000 }).toString().trim(), 10) || 0;
+    }
+  } catch {}
+  return 'Ghostty';
 }
 
 // 打开指定会话的终端（Ghostty 里 kimi --session 恢复）；已开着的会话只唤前台不重复开
 function openSessionTerminal(id, cwd) {
   try {
     if (!/^[\w-]+$/.test(String(id || ''))) return; // session id 只允许安全字符
-    if (sessionCliAlive(id, cwd)) {
-      // 已有终端在跑这个会话：只把终端应用唤到前台（open -a 激活已有实例，不开新窗）
-      spawn('open', ['-a', 'Ghostty.app'], { detached: true, stdio: 'ignore' }).unref();
+    const alivePid = findSessionPid(id, cwd);
+    if (alivePid) {
+      // 已有终端在跑这个会话：激活它的宿主终端应用，浮现到所有窗口上面（不开新窗）
+      spawn('open', ['-a', hostTerminalApp(alivePid)], { detached: true, stdio: 'ignore' }).unref();
       return;
     }
     // shell 安全引号（单引号包裹 + 内部单引号转义），防目录名注入；Ghostty 不吃 spawn 的 cwd，必须 cd
