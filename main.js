@@ -151,26 +151,22 @@ function buildMenu() {
         { label: '关', type: 'radio', checked: !app.getLoginItemSettings().openAtLogin, click: () => app.setLoginItemSettings({ openAtLogin: false }) }
       ]
     },
-    // 会话状态明细：行=直接打开对应终端；忽略监控用 ⌘+点脚下指示点（有活动自动回来）；同项目多窗带 id 后缀区分
+    // 会话状态明细：悬停展开二级目录——打开终端 / 取消监控（取消后隐身，有活动自动回来）；同项目多窗带 id 后缀区分
     {
       label: `会话状态（${lastSessions.length}）`,
       submenu: lastSessions.length
         ? lastSessions.map(x => {
             const dup = lastSessions.filter(y => y.proj && y.proj === x.proj).length > 1;
             const name = `「${x.proj || x.id}${dup ? ' ·' + x.id.slice(-4) : ''}」`;
-            return { label: `${name}${SESSION_LABEL[x.state] || x.state}`, click: () => openSessionTerminal(x.id, x.cwd) };
+            return {
+              label: `${name}${SESSION_LABEL[x.state] || x.state}`,
+              submenu: [
+                { label: '打开终端', click: () => openSessionTerminal(x.id, x.cwd) },
+                { label: '取消监控', click: () => toggleIgnoreSession(x.id) }
+              ]
+            };
           })
         : [{ label: '（没有活跃会话）', enabled: false }]
-    },
-    // 忽略监控：把某个会话从点和菜单里藏起来（有活动自动回来）；独立菜单项，不做隐藏手势
-    {
-      label: '忽略监控',
-      submenu: lastSessions.length
-        ? lastSessions.map(x => ({
-            label: `「${x.proj || x.id}」${SESSION_LABEL[x.state] || x.state}`,
-            click: () => toggleIgnoreSession(x.id)
-          }))
-        : [{ label: '（没有可忽略的会话）', enabled: false }]
     },
     { type: 'separator' },
     { label: '退出', click: () => app.quit() }
