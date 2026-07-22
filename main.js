@@ -239,22 +239,32 @@ function hostTerminalApp(pid, raw = false) {
   return raw ? 'ghostty' : 'Ghostty';
 }
 
+// 从会话存储里取标题（state.json 的 title 字段 = 首条消息，和终端窗口标题一致）
+function sessionTitle(id) {
+  try {
+    const dir = execSync(`ls -d "$HOME/.kimi-code/sessions/*/${id}" 2>/dev/null | head -1`, { timeout: 1500, shell: '/bin/bash' }).toString().trim();
+    if (!dir) return null;
+    const st = JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8'));
+    return typeof st.title === 'string' && st.title ? st.title : null;
+  } catch { return null; }
+}
+
 // 打开指定会话的终端（Ghostty 里 kimi --session 恢复）；已开着的会话只唤前台不重复开
 function openSessionTerminal(id, cwd) {
   try {
     if (!/^[\w-]+$/.test(String(id || ''))) return; // session id 只允许安全字符
     const alivePid = findSessionPid(id, cwd);
     if (alivePid) {
-      // 已有终端在跑这个会话：System Events 把宿主进程抬到最前 + 抬起窗口（open -a 在台前调度下浮不到绝对最前）
-      // 首次会弹辅助功能授权（系统设置→隐私与安全性→辅助功能里允许即可）
+      // 已有终端在跑这个会话：frontmost 抬宿主进程；有标题再精确抬起那个窗口（AXRaise 需辅助功能授权）
       const comm = hostTerminalApp(alivePid, true);
-      const script = `tell application "System Events"
-        set frontmost of (first process whose name is "${comm}") to true
-        try
-          perform action "AXRaise" of window 1 of (first process whose name is "${comm}")
-        end try
-      end tell`;
-      spawn('osascript', ['-e', script], { detached: true, stdio: 'ignore' }).unref();
+      const esc = (s) => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      const proc = `(first process whose name is "${comm}")`;
+      let body = `set frontmost of ${proc} to true`;
+      const title = sessionTitle(id);
+      if (title) {
+        body += `\n  try\n    perform action "AXRaise" of (first window of ${proc} whose name contains "${esc(title)}")\n  end try`;
+      }
+      spawn('osascript', ['-e', `tell application "System Events"\n  ${body}\nend tell`], { detached: true, stdio: 'ignore' }).unref();
       return;
     }
     // shell 安全引号（单引号包裹 + 内部单引号转义），防目录名注入；Ghostty 不吃 spawn 的 cwd，必须 cd
