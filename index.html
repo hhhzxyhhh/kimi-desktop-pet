@@ -334,6 +334,7 @@ function updateSessions(list) {
       d.className = 'ses-dot' + dotClass(x.state);
       d.title = `${x.proj || x.id}（${label[x.state] || x.state}）：点开终端`;
       d.addEventListener('pointerdown', e => e.stopPropagation()); // 别触发窗口拖拽/戳
+      // 点 = 开终端（忽略监控在右键菜单的"忽略监控"里，不做隐藏手势）
       d.addEventListener('click', e => { e.stopPropagation(); openSessionTerm({ id: x.id, cwd: x.cwd }); });
       sesDots.appendChild(d);
     }
