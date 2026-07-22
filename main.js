@@ -225,18 +225,18 @@ function findSessionPid(id, cwd) {
   return null;
 }
 
-// 顺父链找宿主终端应用（kimi → shell → 终端 App），找不到就默认 Ghostty
-function hostTerminalApp(pid) {
+// 顺父链找宿主终端：raw=true 返回进程名（System Events 用），否则返回应用名（open -a 用）
+function hostTerminalApp(pid, raw = false) {
   const APPS = { ghostty: 'Ghostty', Terminal: 'Terminal', iTerm2: 'iTerm', WezTerm: 'WezTerm', kitty: 'kitty', Alacritty: 'Alacritty', Warp: 'Warp' };
   try {
     let cur = pid;
     for (let i = 0; i < 8 && cur > 1; i++) {
       const comm = execSync(`ps -o comm= -p ${cur}`, { timeout: 1000 }).toString().trim().split('/').pop();
-      if (APPS[comm]) return APPS[comm];
+      if (APPS[comm]) return raw ? comm : APPS[comm];
       cur = parseInt(execSync(`ps -o ppid= -p ${cur}`, { timeout: 1000 }).toString().trim(), 10) || 0;
     }
   } catch {}
-  return 'Ghostty';
+  return raw ? 'ghostty' : 'Ghostty';
 }
 
 // 打开指定会话的终端（Ghostty 里 kimi --session 恢复）；已开着的会话只唤前台不重复开
@@ -245,8 +245,16 @@ function openSessionTerminal(id, cwd) {
     if (!/^[\w-]+$/.test(String(id || ''))) return; // session id 只允许安全字符
     const alivePid = findSessionPid(id, cwd);
     if (alivePid) {
-      // 已有终端在跑这个会话：激活它的宿主终端应用，浮现到所有窗口上面（不开新窗）
-      spawn('open', ['-a', hostTerminalApp(alivePid)], { detached: true, stdio: 'ignore' }).unref();
+      // 已有终端在跑这个会话：System Events 把宿主进程抬到最前 + 抬起窗口（open -a 在台前调度下浮不到绝对最前）
+      // 首次会弹辅助功能授权（系统设置→隐私与安全性→辅助功能里允许即可）
+      const comm = hostTerminalApp(alivePid, true);
+      const script = `tell application "System Events"
+        set frontmost of (first process whose name is "${comm}") to true
+        try
+          perform action "AXRaise" of window 1 of (first process whose name is "${comm}")
+        end try
+      end tell`;
+      spawn('osascript', ['-e', script], { detached: true, stdio: 'ignore' }).unref();
       return;
     }
     // shell 安全引号（单引号包裹 + 内部单引号转义），防目录名注入；Ghostty 不吃 spawn 的 cwd，必须 cd
