@@ -7,7 +7,7 @@ const os = require('os');
 const { aggregate, effectiveState, needsReminder, STALE_TTL, REMIND_MAX_AGE } = require('./agent-state.cjs');
 const { clampWindow, clampStep, clampToRect, nearestArea } = require('./display-areas.cjs');
 const { applyStationaryCollectionBehavior } = require('./mac-window.cjs');
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 
 // 统一 userData：打包版 productName 是"Kimi桌宠"（默认 userData 会跟着变），
 // 不统一到固定目录的话，hook 写入的联动状态和打包版读的目录会对不上
@@ -200,10 +200,15 @@ function openKimiTerminal() {
   }
 }
 
-// 打开指定会话的终端（Ghostty 里 kimi --session 恢复）
+// 打开指定会话的终端（Ghostty 里 kimi --session 恢复）；已开着的会话只唤前台不重复开
 function openSessionTerminal(id, cwd) {
   try {
     if (!/^[\w-]+$/.test(String(id || ''))) return; // session id 只允许安全字符
+    if (sessionCliAlive(id)) {
+      // 已有终端在跑这个会话：只把终端应用唤到前台（open -a 激活已有实例，不开新窗）
+      spawn('open', ['-a', 'Ghostty.app'], { detached: true, stdio: 'ignore' }).unref();
+      return;
+    }
     // shell 安全引号（单引号包裹 + 内部单引号转义），防目录名注入；Ghostty 不吃 spawn 的 cwd，必须 cd
     const q = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
     if (process.platform === 'darwin') {
@@ -219,6 +224,14 @@ function openSessionTerminal(id, cwd) {
   } catch (e) {
     console.log('[open-session] 打开失败:', e.message);
   }
+}
+
+// 这个会话的 kimi CLI 是否已经在某个终端里活着（按进程参数匹配，session id 已校验安全字符）
+function sessionCliAlive(id) {
+  try {
+    execSync(`pgrep -f "kimi --session ${id}"`, { timeout: 1500, stdio: 'ignore' });
+    return true;
+  } catch { return false; }
 }
 
 // 没装 Ghostty：有 Homebrew 就自动装（装完自动开）；没 brew 就开可见终端引导装（需输一次密码）
