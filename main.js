@@ -263,7 +263,8 @@ function openSessionTerminal(id, cwd) {
       const lines = ['tell application "System Events"', `  set frontmost of ${proc} to true`];
       const title = sessionTitle(id);
       if (title) {
-        lines.push('  try', `    perform action "AXRaise" of (first window of ${proc} whose name contains "${esc(title)}")`, '  end try');
+        // 不包 try：匹配不到窗口就让 osascript 报错进日志（frontmost 已先执行，不受影响）
+        lines.push(`  perform action "AXRaise" of (first window of ${proc} whose name contains "${esc(title)}")`);
       }
       lines.push('end tell');
       // execFileSync 按行传参（不走 shell，多行脚本不会坏），报错直接进日志
