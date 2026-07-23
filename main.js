@@ -7,7 +7,7 @@ const os = require('os');
 const { aggregate, effectiveState, needsReminder, STALE_TTL, REMIND_MAX_AGE } = require('./agent-state.cjs');
 const { clampWindow, clampStep, clampToRect, nearestArea } = require('./display-areas.cjs');
 const { applyStationaryCollectionBehavior } = require('./mac-window.cjs');
-const { spawn, execSync } = require('child_process');
+const { spawn, execSync, execFileSync } = require('child_process');
 
 // 统一 userData：打包版 productName 是"Kimi桌宠"（默认 userData 会跟着变），
 // 不统一到固定目录的话，hook 写入的联动状态和打包版读的目录会对不上
@@ -242,7 +242,8 @@ function hostTerminalApp(pid, raw = false) {
 // 从会话存储里取标题（state.json 的 title 字段 = 首条消息，和终端窗口标题一致）
 function sessionTitle(id) {
   try {
-    const dir = execSync(`ls -d "$HOME/.kimi-code/sessions/*/${id}" 2>/dev/null | head -1`, { timeout: 1500, shell: '/bin/bash' }).toString().trim();
+    // 注意：* 不能在引号里（否则当字面量不展开），id 单独加引号
+    const dir = execSync(`ls -d "$HOME"/.kimi-code/sessions/*/"${id}" 2>/dev/null | head -1`, { timeout: 1500, shell: '/bin/bash' }).toString().trim();
     if (!dir) return null;
     const st = JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8'));
     return typeof st.title === 'string' && st.title ? st.title : null;
@@ -259,12 +260,18 @@ function openSessionTerminal(id, cwd) {
       const comm = hostTerminalApp(alivePid, true);
       const esc = (s) => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       const proc = `(first process whose name is "${comm}")`;
-      let body = `set frontmost of ${proc} to true`;
+      const lines = ['tell application "System Events"', `  set frontmost of ${proc} to true`];
       const title = sessionTitle(id);
       if (title) {
-        body += `\n  try\n    perform action "AXRaise" of (first window of ${proc} whose name contains "${esc(title)}")\n  end try`;
+        lines.push('  try', `    perform action "AXRaise" of (first window of ${proc} whose name contains "${esc(title)}")`, '  end try');
       }
-      spawn('osascript', ['-e', `tell application "System Events"\n  ${body}\nend tell`], { detached: true, stdio: 'ignore' }).unref();
+      lines.push('end tell');
+      // execFileSync 按行传参（不走 shell，多行脚本不会坏），报错直接进日志
+      try {
+        execFileSync('osascript', lines.flatMap(l => ['-e', l]), { timeout: 5000, stdio: 'pipe' });
+      } catch (e) {
+        console.log('[open-session] 前台唤起失败:', (e.stderr || '').toString().trim() || e.message);
+      }
       return;
     }
     // shell 安全引号（单引号包裹 + 内部单引号转义），防目录名注入；Ghostty 不吃 spawn 的 cwd，必须 cd
