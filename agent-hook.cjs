@@ -6,7 +6,7 @@ const path = require('path');
 
 const MARK = 'pet-hook.cjs';
 const EVENTS = ['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PermissionRequest', 'PermissionResult',
-  'Stop', 'StopFailure', 'Interrupt', 'SessionStart', 'SessionEnd', 'Notification'];
+  'Stop', 'StopFailure', 'Interrupt', 'SessionStart', 'SessionEnd', 'Notification', 'SubagentStart', 'SubagentStop'];
 
 // TOML 基础字符串里反斜杠是转义符：Windows 路径必须双写，否则写出的 config.toml 直接解析失败
 function hookBlock(events, hookDst) {

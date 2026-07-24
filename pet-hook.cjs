@@ -47,8 +47,9 @@ process.stdin.on('end', () => {
   else if (ev === 'PermissionRequest') state = 'permission';   // 等待用户批准
   else if (ev === 'PostToolUse') state = 'working';            // 工具完成，继续干活（写东西/分析）
   else if (ev === 'PermissionResult') state = 'working';       // 批准完继续干
-  else if (ev === 'Stop') state = 'done';                      // 回合完成（只认 Stop，后台任务通知不算）
+  else if (ev === 'Stop') state = 'done';                      // 回合完成（只认主回合 Stop，后台任务/子代理不算）
   else if (ev === 'StopFailure') state = 'error';              // 回合失败
+  else if (ev === 'SubagentStart' || ev === 'SubagentStop') state = 'working'; // 子代理开工/收工：主回合仍在工作，done 只认主回合 Stop
   else if (ev === 'Interrupt' || ev === 'SessionEnd' || ev === 'SessionStart') state = 'idle';
   // SessionStart 也复位（参考 Clawd On Desk）：新会话不继承上一个死会话的残留状态
 

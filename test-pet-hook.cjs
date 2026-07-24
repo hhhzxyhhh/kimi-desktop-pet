@@ -33,6 +33,11 @@ runHook({ hook_event_name: 'PreToolUse', tool_name: 'AskUserQuestion', session_i
 checkTrue('T3 提问→ask', readSes('s1').state === 'ask');
 runHook({ hook_event_name: 'Interrupt', session_id: 's1' });
 checkTrue('T3 打断→idle', readSes('s1').state === 'idle');
+// 子代理开工/收工：都算在干活（done 只认主回合 Stop）
+runHook({ hook_event_name: 'SubagentStart', session_id: 's1' });
+checkTrue('T3 子代理开工→working', readSes('s1').state === 'working');
+runHook({ hook_event_name: 'SubagentStop', session_id: 's1' });
+checkTrue('T3 子代理收工仍→working', readSes('s1').state === 'working');
 
 // T4: SessionEnd 删除自己的状态文件，不影响别的会话
 runHook({ hook_event_name: 'SessionEnd', session_id: 's1' });
